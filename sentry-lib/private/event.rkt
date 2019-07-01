@@ -45,17 +45,20 @@
          tags
          (current-sentry-user)))
 
+(define OPTIONAL-EVENT-ACCESSORS
+  (hasheq 'transaction event-transaction
+          'server_name event-server-name
+          'environment event-environment
+          'release event-release
+          'tags event-tags
+          'user event-user))
+
 (define (event->jsexpr e)
   (for/fold ([data (hasheq 'platform "other"
                            'level (symbol->string (event-level e))
                            'timestamp (moment->iso8601 (event-timestamp e))
                            'exception (exn->exception (event-e e)))])
-            ([(key accessor) (hasheq 'transaction event-transaction
-                                     'server_name event-server-name
-                                     'environment event-environment
-                                     'release event-release
-                                     'tags event-tags
-                                     'user event-user)])
+            ([(key accessor) (in-hash OPTIONAL-EVENT-ACCESSORS)])
     (cond
       [(accessor e) => (curry hash-set data key)]
       [else data])))
@@ -67,8 +70,8 @@
                                 'stacktrace (hasheq 'frames (ctx->frames ctx))))))
 
 (define (ctx->frames ctx)
-  (for/list ([mark (in-list ctx)])
-    (match-define (cons proc loc) mark)
+  (for/list ([frame (in-list ctx)])
+    (match-define (cons proc loc) frame)
     (hash-union
      (hash 'function (symbol->string (or proc 'unknown)))
      (if loc
