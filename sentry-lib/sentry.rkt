@@ -46,15 +46,15 @@
   (with-output-to-bytes
     (lambda _
       (define-values (key secret)
-        (match (string-split (url-user dsn) ":")
+        (match (string-split (or (url-user dsn) "") ":")
           [(list key)        (values key #f)]
           [(list key secret) (values key secret)]))
 
-      (write-bytes #"Sentry sentry_version=7, sentry_client=racket-sentry/0.0.0, ")
-      (write-bytes (string->bytes/utf-8 (format "sentry_timestamp=~a, " (current-seconds))))
-      (write-bytes (string->bytes/utf-8 (format "sentry_key=~a, " key)))
+      (display "Sentry sentry_version=7, sentry_client=racket-sentry/0.0.0, ")
+      (display (format "sentry_timestamp=~a, " (current-seconds)))
+      (display (format "sentry_key=~a" key))
       (when secret
-        (write-bytes (string->bytes/utf-8 (format "sentry_secret=~a" secret)))))))
+        (display (format ", sentry_secret=~a" secret))))))
 
 (define (dsn->endpoint dsn)
   (define-values (path project-id)
