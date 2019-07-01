@@ -30,12 +30,15 @@
        user?)
   (user id username email ip-address subscription))
 
+(define OPTIONAL-USER-ACCESSORS
+  (hasheq 'username user-username
+          'email user-email
+          'ip_address user-ip-address
+          'subscription user-subscription))
+
 (define (user->event u)
   (for/fold ([h (hasheq 'id (user-id u))])
-            ([(key accessor) (in-hash (hasheq 'username user-username
-                                              'email user-email
-                                              'ip_address user-ip-address
-                                              'subscription user-subscription))])
+            ([(key accessor) (in-hash OPTIONAL-USER-ACCESSORS)])
     (cond
       [(accessor u) => (curry hash-set h key)]
       [else h])))
