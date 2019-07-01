@@ -21,13 +21,17 @@
 
 (define-logger sentry)
 
-(struct sentry (dsn custodian chan dispatcher)
+(struct sentry (dsn release environment custodian chan dispatcher)
   #:transparent)
 
 (define/contract (make-sentry dsn:str
-                              #:backlog [backlog 128])
+                              #:backlog [backlog 128]
+                              #:release [release #f]
+                              #:environment [environment #f])
   (->* (string?)
-       (#:backlog exact-positive-integer?)
+       (#:backlog exact-positive-integer?
+        #:release (or/c false/c non-empty-string?)
+        #:environment (or/c false/c non-empty-string?))
        sentry?)
   (define dsn (string->url dsn:str))
   (define auth (dsn->auth dsn))
@@ -36,7 +40,7 @@
   (parameterize ([current-custodian custodian])
     (define chan (make-async-channel backlog))
     (define dispatcher (make-sentry-dispatcher chan auth endpoint))
-    (sentry dsn custodian chan dispatcher)))
+    (sentry dsn release environment custodian chan dispatcher)))
 
 (define (dsn->auth dsn)
   (with-output-to-bytes
@@ -93,43 +97,46 @@
                         (lambda (e)
                           (log-sentry-error "failed to dispatch: ~a" (exn-message e))
                           (loop))])
-         (match (sync chan)
-           [(list 'capture e)
-            (cond
-              [(rate-limited?)
-               (log-sentry-warning "dropping event ~v due to rate limit" e)
-               (loop)]
+         (define e (sync chan))
+         (cond
+           [(rate-limited?)
+            (log-sentry-warning "dropping event ~v due to rate limit" e)
+            (loop)]
 
-              [else
-               (log-sentry-debug "capturing event ~v" e)
-               (define-values (status headers response)
-                 (send-event! e))
+           [else
+            (log-sentry-debug "capturing event ~v" e)
+            (define-values (status headers response)
+              (send-event! e))
 
-               (match (status-line->code status)
-                 [429
-                  (log-sentry-warning "rate limit reached")
-                  (define retry-after
-                    (string->number
-                     (hash-ref (headers->hash headers) "retry-after" "")))
+            (match (status-line->code status)
+              [429
+               (log-sentry-warning "rate limit reached")
+               (define retry-after
+                 (string->number
+                  (hash-ref (headers->hash headers) "retry-after" "")))
 
-                  (when retry-after
-                    (log-sentry-warning "ignoring all events for the next ~a seconds" retry-after)
-                    (set! rate-limit-deadline (+ (current-seconds) retry-after)))]
+               (when retry-after
+                 (log-sentry-warning "ignoring all events for the next ~a seconds" retry-after)
+                 (set! rate-limit-deadline (+ (current-seconds) retry-after)))]
 
-                 [200
-                  (log-sentry-debug "event captured successfully")]
+              [200
+               (log-sentry-debug "event captured successfully")]
 
-                 [_
-                  (log-sentry-warning UNEXPECTED-RESPONSE-MESSAGE
-                                      status headers (read-json response))])
+              [_
+               (log-sentry-warning UNEXPECTED-RESPONSE-MESSAGE
+                                   status headers (read-json response))])
 
-               (loop)])]))))))
+            (loop)]))))))
 
 (define sentry-capture-exception!
   (make-keyword-procedure
    (lambda (kws kw-args s . args)
-     (define event (keyword-apply make-event kws kw-args args))
-     (async-channel-put (sentry-chan s) (list 'capture event)))))
+     (define e
+       (let ([e (keyword-apply make-event kws kw-args args)])
+         (struct-copy event e
+                      [environment (or (event-environment e) (sentry-environment s))]
+                      [release (or (event-release e) (sentry-release s))])))
+     (async-channel-put (sentry-chan s) e))))
 
 (define UNEXPECTED-RESPONSE-MESSAGE #<<MESSAGE
 unexpected response from Sentry server

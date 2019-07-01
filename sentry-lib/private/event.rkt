@@ -14,7 +14,7 @@
 
 (provide
  make-event
- event?
+ (struct-out event)
  event->jsexpr)
 
 (struct event (e level timestamp transaction server-name environment release request tags user)

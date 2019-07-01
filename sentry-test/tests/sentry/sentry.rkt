@@ -12,7 +12,9 @@
    "sentry"
 
    (when test-dsn
-     (let ([client (make-sentry test-dsn)])
+     (let ([client (make-sentry test-dsn
+                                #:environment "test"
+                                #:release "0.0.0")])
        (test-suite
         "sentry-capture-exception!"
 
