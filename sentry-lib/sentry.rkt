@@ -87,8 +87,8 @@
        (http-conn-sendrecv! conn endpoint
                             #:method "POST"
                             #:headers (list "Content-type: application/json; charset=utf-8"
-                                            (~a "X-Sentry-Auth: " auth)
-                                            "User-Agent: racket-sentry/0.0.0")
+                                            "User-Agent: racket-sentry/0.0.0"
+                                            (~a "X-Sentry-Auth: " auth))
                             #:data (call-with-output-bytes
                                     (curry write-json (event->jsexpr e)))))
 
@@ -116,7 +116,7 @@
                   (hash-ref (headers->hash headers) "retry-after" "")))
 
                (when retry-after
-                 (log-sentry-warning "ignoring all events for the next ~a seconds" retry-after)
+                 (log-sentry-warning "dropping all events for the next ~a seconds" retry-after)
                  (set! rate-limit-deadline (+ (current-seconds) retry-after)))]
 
               [200
