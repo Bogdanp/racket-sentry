@@ -11,6 +11,12 @@ A [Sentry] SDK for Racket.
 Documentation for this library can be found on the [Racket package
 server][docs].
 
+## TODOs
+
+* [ ] Breadcrumbs
+* [ ] Sampling
+* [ ] Scopes/contexts
+
 
 [Sentry]: https://sentry.io
 [docs]: https://docs.racket-lang.org/sentry@sentry-doc/index.html

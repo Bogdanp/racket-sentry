@@ -32,8 +32,8 @@ needs to run and you can start sending exceptions by calling
 @racketblock[
 (require sentry)
 
-(define sentry-client (make-sentry-client "https://key@sentry.io/12"))
-(sentry-capture-exception! sentry-client (make-exn:fail "an error" (current-continuation-marks)))
+(parameterize ([current-sentry (make-sentry-client "https://key@sentry.io/12")])
+  (sentry-capture-exception! (make-exn:fail "an error" (current-continuation-marks))))
 ]
 
 @section[#:tag "reference"]{Reference}
@@ -43,10 +43,15 @@ needs to run and you can start sending exceptions by calling
   Returns @racket[#t] when @racket[v] is a Sentry client.
 }
 
+@defparam[current-sentry client sentry?]{
+  A parameter that can store the current Sentry client for use with
+  @racket[sentry-capture-exception!].
+}
+
 @defproc[(make-sentry [dsn string?]
                       [#:backlog backlog exact-positive-integer? 128]
-                      [#:release release (or/c false/c non-empty-string?) #f]
-                      [#:environment environment (or/c false/c non-empty-string?) #f]) sentry?]{
+                      [#:release release (or/c false/c non-empty-string?) (getenv "SENTRY_RELEASE")]
+                      [#:environment environment (or/c false/c non-empty-string?) (getenv "SENTRY_ENVIRONMENT")]) sentry?]{
   Initialize a Sentry client and start the background thread that will
   send errors to the API.
 
@@ -63,8 +68,8 @@ needs to run and you can start sending exceptions by calling
   Sentry clients log messages to the @racket['sentry] topic.
 }
 
-@defproc[(sentry-capture-exception! [client sentry?]
-                                    [e exn?]
+@defproc[(sentry-capture-exception! [e exn?]
+                                    [client (or/c false/c sentry?) (current-sentry)]
                                     [#:level level (or/c 'fatal 'error 'warning 'info 'debug) 'error]
                                     [#:timestamp timestamp moment? (now/moment)]
                                     [#:server-name server-name (or/c false/c non-empty-string?) #f]
@@ -74,6 +79,8 @@ needs to run and you can start sending exceptions by calling
                                     [#:tags tags (hash/c non-empty-string? string?) (hash)]
                                     [#:user user sentry-user? (current-sentry-user)]) void?]{
   Asynchronously send an error to the Sentry API.
+
+  Does nothing when @racket[client] is @racket[#f].
 }
 
 @subsection{Users}

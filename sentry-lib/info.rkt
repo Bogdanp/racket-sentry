@@ -1,6 +1,6 @@
 #lang info
 
-(define version "0.0.0")
+(define version "0.0.1")
 (define collection "sentry")
 (define deps '("base"
                "gregor-lib"
