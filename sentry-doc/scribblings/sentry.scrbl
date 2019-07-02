@@ -18,6 +18,10 @@ either a managed or a self-hosted @hyperlink[sentry]{Sentry} instance.
 
 @local-table-of-contents[]
 
+@section[#:tag "stability"]{API Stability}
+
+This package is pre-1.0 and its API may change without notice!
+
 @section[#:tag "quickstart"]{Quickstart}
 
 Install the package from the package server with
