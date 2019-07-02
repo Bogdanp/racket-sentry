@@ -97,5 +97,5 @@
   (hasheq 'url (url->string (request-uri req))
           'method (bytes->string/utf-8 (request-method req))
           'headers (for/hash ([hdr (in-list (request-headers/raw req))])
-                     (values (bytes->string/utf-8 (header-field hdr))
+                     (values (string->symbol (bytes->string/utf-8 (header-field hdr)))
                              (bytes->string/utf-8 (header-value hdr))))))
