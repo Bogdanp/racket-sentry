@@ -32,7 +32,7 @@ needs to run and you can start sending exceptions by calling
 @racketblock[
 (require sentry)
 
-(parameterize ([current-sentry (make-sentry-client "https://key@sentry.io/12")])
+(parameterize ([current-sentry (make-sentry "https://key@sentry.io/12")])
   (sentry-capture-exception! (make-exn:fail "an error" (current-continuation-marks))))
 ]
 
