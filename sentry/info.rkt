@@ -2,5 +2,7 @@
 
 (define collection 'multi)
 
-(define deps '("sentry-lib"))
-(define implies '("sentry-lib"))
+(define deps '("sentry-doc"
+               "sentry-lib"))
+(define implies '("sentry-doc"
+                  "sentry-lib"))
