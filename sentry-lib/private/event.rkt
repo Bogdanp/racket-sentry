@@ -82,16 +82,17 @@
                                 'stacktrace (hasheq 'frames (ctx->jsexpr ctx))))))
 
 (define (ctx->jsexpr ctx)
-  (for/list ([frame (in-list ctx)])
-    (match-define (cons proc loc) frame)
-    (hash-union
-     (hash 'function (symbol->string (or proc 'unknown)))
-     (if loc
-         (hasheq 'abs_path (if (path? (srcloc-source loc))
-                               (path->string (srcloc-source loc))
-                               (~a (srcloc-source loc)))
-                 'lineno (or (srcloc-line loc) 0))
-         (hasheq)))))
+  (reverse
+   (for/list ([frame (in-list ctx)])
+     (match-define (cons proc loc) frame)
+     (hash-union
+      (hash 'function (symbol->string (or proc 'unknown)))
+      (if loc
+          (hasheq 'abs_path (if (path? (srcloc-source loc))
+                                (path->string (srcloc-source loc))
+                                (~a (srcloc-source loc)))
+                  'lineno (or (srcloc-line loc) 0))
+          (hasheq))))))
 
 (define (request->jsexpr req)
   (hasheq 'url (url->string (request-uri req))
