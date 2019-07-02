@@ -7,14 +7,14 @@
 (provide
  current-sentry-user
  make-sentry-user
- user?
- user->event)
+ sentry-user?
+ sentry-user->jsexpr)
 
-(struct user (id username email ip-address subscription)
+(struct sentry-user (id username email ip-address subscription)
   #:transparent)
 
 (define/contract current-sentry-user
-  (parameter/c (or/c false/c user?))
+  (parameter/c (or/c false/c sentry-user?))
   (make-parameter #f))
 
 (define/contract (make-sentry-user #:id id
@@ -27,17 +27,17 @@
         #:email (or/c false/c non-empty-string?)
         #:ip-address (or/c false/c non-empty-string?)
         #:subscription (or/c false/c non-empty-string?))
-       user?)
-  (user id username email ip-address subscription))
+       sentry-user?)
+  (sentry-user id username email ip-address subscription))
 
 (define OPTIONAL-USER-ACCESSORS
-  (hasheq 'username user-username
-          'email user-email
-          'ip_address user-ip-address
-          'subscription user-subscription))
+  (hasheq 'username sentry-user-username
+          'email sentry-user-email
+          'ip_address sentry-user-ip-address
+          'subscription sentry-user-subscription))
 
-(define (user->event u)
-  (for/fold ([h (hasheq 'id (user-id u))])
+(define (sentry-user->jsexpr u)
+  (for/fold ([h (hasheq 'id (sentry-user-id u))])
             ([(key accessor) (in-hash OPTIONAL-USER-ACCESSORS)])
     (cond
       [(accessor u) => (curry hash-set h key)]

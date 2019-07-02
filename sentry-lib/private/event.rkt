@@ -39,7 +39,7 @@
         #:release (or/c false/c non-empty-string?)
         #:request (or/c false/c request?)
         #:tags (hash/c non-empty-string? string?)
-        #:user (or/c false/c user?))
+        #:user (or/c false/c sentry-user?))
        event?)
   (event e
          level
@@ -61,7 +61,9 @@
                      (define request (event-request e))
                      (and request (request->jsexpr request)))
           'tags event-tags
-          'user event-user))
+          'user (lambda (e)
+                  (define user (event-user e))
+                  (and user (sentry-user->jsexpr user)))))
 
 (define (event->jsexpr e)
   (for/fold ([data (hasheq 'platform "other"

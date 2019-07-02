@@ -5,4 +5,5 @@
 (provide (all-from-out "sentry.rkt")
 
          current-sentry-user
-         make-sentry-user)
+         make-sentry-user
+         sentry-user?)
