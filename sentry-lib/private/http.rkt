@@ -23,8 +23,8 @@
   (or (url-port u)
       (case (url-scheme u)
         [("http")  80]
-        [("https") 443])
-      80))
+        [("https") 443]
+        [else 80])))
 
 (define status-code-re
   #rx"^HTTP.... ([^ ]+) ")
