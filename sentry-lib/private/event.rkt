@@ -86,7 +86,7 @@
    (for/list ([frame (in-list ctx)])
      (match-define (cons proc loc) frame)
      (hash-union
-      (hash 'function (symbol->string (or proc 'unknown)))
+      (hash 'function (~a (or proc 'unknown)))
       (if loc
           (hasheq 'abs_path (if (path? (srcloc-source loc))
                                 (path->string (srcloc-source loc))
