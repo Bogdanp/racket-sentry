@@ -1,16 +1,17 @@
 name: CI
 on: [push, pull_request]
 jobs:
-  name: Build & Test
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@master
-    - uses: Bogdanp/setup-racket@v0.8
-      with:
-        architecture: x64
-        variant: 'CS'
-        version: '7.7'
-    - run: raco pkg install --batch --auto sentry-lib/ sentry-doc/ sentry-test/ sentry/
-    - run: raco test sentry-test/
-      env:
-        SENTRY_TEST_DSN: ${{ secrets.SENTRY_TEST_DSN }}
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - uses: Bogdanp/setup-racket@v0.8
+        with:
+          architecture: x64
+          variant: 'CS'
+          version: '7.7'
+      - run: raco pkg install --batch --auto sentry-lib/ sentry-doc/ sentry-test/ sentry/
+      - run: raco test sentry-test/
+        env:
+          SENTRY_TEST_DSN: ${{ secrets.SENTRY_TEST_DSN }}
