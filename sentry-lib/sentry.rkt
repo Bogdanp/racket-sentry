@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require json
+(require file/gzip
+         json
          net/http-client
          net/url
          racket/async-channel
@@ -106,6 +107,11 @@
          (unless (http-conn-live? conn)
            (connect!))
 
+         (define data/compressed
+           (call-with-output-bytes
+            (lambda (out)
+              (gzip-through-ports (open-input-bytes data) out #f (current-seconds)))))
+
          (let loop ([failures 0])
            (with-handlers ([exn:fail?
                             (lambda (e)
@@ -121,10 +127,11 @@
               (lambda ()
                 (http-conn-sendrecv! conn endpoint
                                      #:method "POST"
-                                     #:headers (list "Content-type: application/json; charset=utf-8"
+                                     #:headers (list "Content-encoding: gzip"
+                                                     "Content-type: application/json; charset=utf-8"
                                                      (~a "User-Agent: racket-sentry/" (lib-version))
                                                      (~a "X-Sentry-Auth: " auth))
-                                     #:data data))
+                                     #:data data/compressed))
               (lambda vs
                 (channel-put res vs))))))))
 
