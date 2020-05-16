@@ -190,9 +190,12 @@
   (make-keyword-procedure
    (lambda (kws kw-args e [s (current-sentry)] . args)
      (when s
+       (define ch (sentry-chan s))
        (define evt
          (let ([evt (keyword-apply make-event kws kw-args (cons e args))])
            (struct-copy event evt
                         [environment (or (event-environment evt) (sentry-environment s))]
                         [release (or (event-release evt) (sentry-release s))])))
-       (async-channel-put (sentry-chan s) evt)))))
+
+       (unless (sync/timeout 0 (async-channel-put-evt ch evt))
+         (log-sentry-debug "dropping event ~.s because the backlog is full" evt))))))

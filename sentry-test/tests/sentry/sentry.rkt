@@ -19,7 +19,14 @@
            #:dispatch (dispatch/servlet start))
     (sync ch)))
 
-(define e (make-exn:fail "an exception" (current-continuation-marks)))
+(define (box-update! b f)
+  (define v (unbox b))
+  (unless (box-cas! b v (f v))
+    (box-update! b f)))
+
+(define e
+  (make-exn:fail "an exception" (current-continuation-marks)))
+
 (define sentry-tests
   (test-suite
    "sentry"
@@ -49,7 +56,7 @@
       (sentry-stop c))
 
     (let ([stop #f]
-          [total 0])
+          [total (box 0)])
       (test-suite
        "retries"
 
@@ -57,11 +64,12 @@
        (lambda ()
          (set! stop (make-server
                      (lambda (_req)
-                       (set! total (add1 total))
-                       (response/empty
+                       (box-update! total add1)
+                       (response/output
                         #:code 429
                         #:message #"Too Many Requests"
-                        #:headers (list (make-header #"Retry-After" #"1")))))))
+                        #:headers (list (make-header #"Retry-After" #"2"))
+                        void)))))
 
        #:after
        (lambda ()
@@ -71,10 +79,10 @@
          (parameterize ([current-sentry (make-sentry "http://test@127.0.0.1:9095/test")])
            (for ([_ (in-range 10)])
              (sentry-capture-exception! e))
-           (sleep 1)
+           (sleep 2)
            (sentry-capture-exception! e)
            (sentry-stop)
-           (check-equal? total 2)))))
+           (check-equal? (unbox total) 2)))))
 
     (let ([stop #f])
       (test-suite
@@ -84,20 +92,47 @@
        (lambda ()
          (set! stop (make-server
                      (lambda (_req)
-                       (sleep 15)
-                       (response/empty)))))
+                       (sleep 5)
+                       (response/output void)))))
 
        #:after
        (lambda ()
          (stop))
 
        (test-case "times out after `send-timeout' milliseconds"
-         (parameterize ([current-sentry (make-sentry "http://test@127.0.0.1:9095/test"
-                                                     #:send-timeout-ms 1000)])
+         (parameterize ([current-sentry (make-sentry
+                                         #:send-timeout-ms 1000
+                                         "http://test@127.0.0.1:9095/test")])
            (define t0 (current-seconds))
            (sentry-capture-exception! e)
            (sentry-stop)
-           (check-true (<= (- (current-seconds) t0) 2)))))))))
+           (check-true (<= (- (current-seconds) t0) 2))))))
+
+    (let ([stop #f]
+          [total (box 0)])
+      (test-suite
+       "backlog"
+
+       #:before
+       (lambda ()
+         (set! stop (make-server
+                     (lambda (_req)
+                       (sleep 1)
+                       (box-update! total add1)
+                       (response/output void)))))
+
+       #:after
+       (lambda ()
+         (stop))
+
+       (test-case "drops events when the queue is full"
+         (parameterize ([current-sentry (make-sentry
+                                         #:backlog 1
+                                         "http://test@127.0.0.1:9095/test")])
+           (for ([_ (in-range 100)])
+             (sentry-capture-exception! e))
+           (sentry-stop)
+           (check-equal? (unbox total) 2))))))))
 
 (module+ test
   (require rackunit/text-ui)

@@ -57,7 +57,7 @@ needs to run and you can start sending exceptions by calling
 
   @racket[backlog] specifies the size of the error queue.  When the
   queue fills up, calls to @racket[sentry-capture-exception!] will
-  start to block so you need to size this appropriately.
+  start to silently drop events.
 
   @racket[release] can be set to tag each error with the current
   release (usually a GIT SHA).
