@@ -2,14 +2,18 @@
 
 (require rackunit
          "event.rkt"
-         "sentry.rkt")
+         "http.rkt"
+         "sentry.rkt"
+         "user.rkt")
 
 (define all-sentry-tests
   (test-suite
    "sentry"
 
    event-tests
-   sentry-tests))
+   http-tests
+   sentry-tests
+   user-tests))
 
 (module+ main
   (require rackunit/text-ui)

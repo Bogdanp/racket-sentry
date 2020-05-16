@@ -6,23 +6,24 @@
          racket/async-channel
          racket/contract
          racket/format
-         racket/function
          racket/list
          racket/match
          racket/port
          racket/string
          "private/event.rkt"
-         "private/http.rkt")
+         "private/http.rkt"
+         "private/reflect.rkt")
 
 (provide
  current-sentry
  make-sentry
  sentry?
- sentry-capture-exception!)
+ sentry-capture-exception!
+ sentry-stop)
 
 (define-logger sentry)
 
-(struct sentry (dsn release environment custodian chan dispatcher)
+(struct sentry (release environment custodian chan dispatcher)
   #:transparent)
 
 (define/contract current-sentry
@@ -45,21 +46,27 @@
   (parameterize ([current-custodian custodian])
     (define chan (make-async-channel backlog))
     (define dispatcher (make-sentry-dispatcher chan auth endpoint))
-    (sentry dsn release environment custodian chan dispatcher)))
+    (sentry release environment custodian chan dispatcher)))
+
+(define/contract (sentry-stop [s (current-sentry)])
+  (->* () (sentry?) void?)
+  (async-channel-put (sentry-chan s) 'stop)
+  (thread-wait (sentry-dispatcher s))
+  (custodian-shutdown-all (sentry-custodian s)))
 
 (define (dsn->auth dsn)
   (with-output-to-bytes
-    (lambda _
+    (lambda ()
       (define-values (key secret)
         (match (string-split (or (url-user dsn) "") ":")
           [(list key)        (values key #f)]
           [(list key secret) (values key secret)]))
 
-      (display "Sentry sentry_version=7, sentry_client=racket-sentry/0.0.1, ")
-      (display (format "sentry_timestamp=~a, " (current-seconds)))
-      (display (format "sentry_key=~a" key))
+      (printf "Sentry sentry_version=7, sentry_client=racket-sentry/~a, " (lib-version))
+      (printf "sentry_timestamp=~a, " (current-seconds))
+      (printf "sentry_key=~a" key)
       (when secret
-        (display (format ", sentry_secret=~a" secret))))))
+        (printf ", sentry_secret=~a" secret)))))
 
 (define (dsn->endpoint dsn)
   (define-values (path project-id)
@@ -80,80 +87,83 @@
   (define conn (http-conn))
 
   (define (connect!)
-    (http-conn-open! conn
-                     (url-host endpoint:url)
-                     #:port (url-port/safe endpoint:url)
-                     #:ssl? (url-ssl? endpoint:url)
-                     #:auto-reconnect? #t))
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (log-sentry-error "failed to connect: ~a" (exn-message e)))])
+      (http-conn-open! conn
+                       (url-host endpoint:url)
+                       #:port (url-port/safe endpoint:url)
+                       #:ssl? (url-ssl? endpoint:url)
+                       #:auto-reconnect? #t)))
 
-  (define dispatcher
-    (lambda _
-      (parameterize ([current-custodian (make-custodian)])
-        (connect!)
-        (log-sentry-debug "dispatcher ready for action")
+  (define (send-event! data)
+    (unless (http-conn-live? conn)
+      (connect!))
 
-        (define rate-limit-deadline (current-seconds))
-        (define (rate-limited?)
-          (< (current-seconds) rate-limit-deadline))
+    (let loop ([failures 0])
+      (with-handlers ([exn:fail?
+                       (lambda (e)
+                         (cond
+                           [(zero? failures)
+                            (log-sentry-warning "request failed: ~a" (exn-message e))
+                            (connect!)
+                            (loop (add1 failures))]
 
-        (define (send-event! e)
-          ;; the point of this whole thing is to try and gracefully handle connection resets
-          (let loop ([failures 0])
-            (with-handlers ([exn:fail?
-                             (lambda (e)
-                               (cond
-                                 [(zero? failures)
-                                  (connect!)
-                                  (loop (add1 failures))]
+                           [else
+                            (raise e)]))])
+        (http-conn-sendrecv! conn endpoint
+                             #:method "POST"
+                             #:headers (list "Content-type: application/json; charset=utf-8"
+                                             (~a "User-Agent: racket-sentry/" (lib-version))
+                                             (~a "X-Sentry-Auth: " auth))
+                             #:data data))))
 
-                                 [else (raise e)]))])
-              (http-conn-sendrecv! conn endpoint
-                                   #:method "POST"
-                                   #:headers (list "Content-type: application/json; charset=utf-8"
-                                                   "User-Agent: racket-sentry/0.0.1"
-                                                   (~a "X-Sentry-Auth: " auth))
-                                   #:data (call-with-output-bytes
-                                           (curry write-json (event->jsexpr e)))))))
+  (define (dispatcher)
+    (log-sentry-debug "dispatcher ready for action")
+    (let loop ([rate-limit-deadline 0])
+      (with-handlers ([exn:fail?
+                       (lambda (e)
+                         (log-sentry-error "failed to dispatch: ~a" (exn-message e))
+                         (log-sentry-warning "restarting dispatcher in 30 seconds")
+                         (sleep 30)
+                         (dispatcher))])
+        (match (sync chan)
+          ['stop
+           (log-sentry-debug "received stop event")
+           (http-conn-close! conn)]
 
-        (let loop ()
-          (with-handlers ([exn:fail?
-                           (lambda (e)
-                             (log-sentry-error "failed to dispatch: ~a" (exn-message e))
-                             (log-sentry-warning "restarting dispatcher in 30 seconds")
-                             (sleep 30)
-                             (dispatcher))])
-            (define e (sync chan))
-            (cond
-              [(rate-limited?)
-               (log-sentry-warning "dropping event ~v due to rate limit" e)
-               (loop)]
+          [(and (? event?) e)
+           #:when (< (current-inexact-milliseconds) rate-limit-deadline)
+           (log-sentry-warning "dropping event ~v due to rate limit" e)
+           (loop rate-limit-deadline)]
 
-              [else
-               (log-sentry-debug "capturing event ~v" e)
-               (define-values (status headers response)
-                 (send-event! e))
+          [(and (? event?) e)
+           (log-sentry-debug "capturing event ~v" e)
+           (define-values (status headers out)
+             (send-event! (jsexpr->bytes (event->jsexpr e))))
 
-               (log-sentry-debug "received response ~v" status)
-               (define response:bytes (port->bytes response))
-               (match (status-line->code status)
-                 [429
-                  (log-sentry-warning "rate limit reached")
-                  (define retry-after
-                    (string->number
-                     (hash-ref (headers->hash headers) "retry-after" "")))
+           (define data (port->bytes out))
+           (log-sentry-debug "received response~n  status: ~.s~n  data: ~.s" status data)
+           (match status
+             [(regexp #px"HTTP.... 429 ")
+              (log-sentry-warning "rate limit reached")
+              (define retry-after
+                (or
+                 (string->number
+                  (bytes->string/utf-8
+                   (or (headers-ref headers #"retry-after") #"")))
+                 30))
 
-                  (when retry-after
-                    (log-sentry-warning "dropping all events for the next ~a seconds" retry-after)
-                    (set! rate-limit-deadline (+ (current-seconds) retry-after)))]
+              (log-sentry-warning "dropping all events for the next ~a seconds" retry-after)
+              (loop (+ (current-inexact-milliseconds) (* retry-after 1000)))]
 
-                 [200
-                  (log-sentry-debug "event captured successfully")]
+             [(regexp #px"HTTP.... 20. ")
+              (log-sentry-debug "event captured successfully")
+              (loop 0)]
 
-                 [_
-                  (log-sentry-warning UNEXPECTED-RESPONSE-MESSAGE
-                                      status headers response:bytes)])
-
-               (loop)]))))))
+             [_
+              (log-sentry-warning "unexpected response from Sentry~n  status: ~.s~n  headers: ~.s~n  data ~.s" status headers data)
+              (loop 0)])]))))
 
   (thread dispatcher))
 
@@ -167,12 +177,3 @@
                         [environment (or (event-environment evt) (sentry-environment s))]
                         [release (or (event-release evt) (sentry-release s))])))
        (async-channel-put (sentry-chan s) evt)))))
-
-(define UNEXPECTED-RESPONSE-MESSAGE #<<MESSAGE
-unexpected response from Sentry server
-
-status: ~a
-headers: ~v
-data: ~a
-MESSAGE
-  )

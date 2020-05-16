@@ -87,6 +87,12 @@ needs to run and you can start sending exceptions by calling
   Does nothing when @racket[client] is @racket[#f].
 }
 
+@defproc[(sentry-stop [client sentry? (current-sentry)]) void?]{
+  Waits for all pending events in @racket[client] to be sent and then
+  shuts down its event loop.
+}
+
+
 @subsection{Users}
 
 @defproc[(sentry-user? [v any/c]) boolean?]{

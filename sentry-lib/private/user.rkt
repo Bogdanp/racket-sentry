@@ -1,7 +1,6 @@
 #lang racket/base
 
 (require racket/contract
-         racket/function
          racket/string)
 
 (provide
@@ -30,15 +29,18 @@
        sentry-user?)
   (sentry-user id username email ip-address subscription))
 
-(define OPTIONAL-USER-ACCESSORS
-  (hasheq 'username sentry-user-username
+(define accessors
+  (hasheq 'id sentry-user-id
+          'username sentry-user-username
           'email sentry-user-email
           'ip_address sentry-user-ip-address
           'subscription sentry-user-subscription))
 
 (define (sentry-user->jsexpr u)
-  (for/fold ([h (hasheq 'id (sentry-user-id u))])
-            ([(key accessor) (in-hash OPTIONAL-USER-ACCESSORS)])
-    (cond
-      [(accessor u) => (curry hash-set h key)]
-      [else h])))
+  (for*/hasheq ([(key accessor) (in-hash accessors)]
+                [value (in-value (accessor u))]
+                #:when value)
+    (values key value)))
+
+(module+ test
+  (require rackunit))
