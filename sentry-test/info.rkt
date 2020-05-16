@@ -7,6 +7,7 @@
                      "gregor-lib"
                      "rackunit-lib"
                      "sentry-lib"
+                     "threading-lib"
                      "web-server-lib"))
 
 (define update-implies '("sentry-lib"))

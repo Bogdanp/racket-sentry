@@ -15,7 +15,6 @@ server][docs].
 
 * [ ] Breadcrumbs
 * [ ] Sampling
-* [ ] Scopes/contexts
 
 
 [Sentry]: https://sentry.io

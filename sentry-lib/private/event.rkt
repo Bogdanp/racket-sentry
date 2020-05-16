@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require gregor
+         mzlib/os
          net/url
          racket/contract
          racket/format
@@ -80,6 +81,19 @@
                      (values (string->symbol (bytes->string/utf-8 (header-field hdr)))
                              (bytes->string/utf-8 (header-value hdr))))))
 
+(define contexts
+  (hasheq
+   'device (hasheq
+            'name (gethostname))
+   'os (hasheq
+        'raw_description (system-type 'machine))
+   'runtime (hasheq
+             'name (case (system-type 'vm)
+                     [(racket) "Racket BC"]
+                     [(chez-scheme) "Racket CS"]
+                     [else (format "Racket ~a" (system-type 'vm))])
+             'version (version))))
+
 (define accessors
   (hasheq
    'platform (lambda (_) "other")
@@ -96,4 +110,6 @@
    'tags event-tags
    'user (lambda (e)
            (define user (event-user e))
-           (and user (sentry-user->jsexpr user)))))
+           (and user (sentry-user->jsexpr user)))
+   'contexts (lambda (_)
+               contexts)))
