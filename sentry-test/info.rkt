@@ -6,6 +6,7 @@
 (define build-deps '("base"
                      "gregor-lib"
                      "rackunit-lib"
-                     "sentry-lib"))
+                     "sentry-lib"
+                     "web-server-lib"))
 
 (define update-implies '("sentry-lib"))

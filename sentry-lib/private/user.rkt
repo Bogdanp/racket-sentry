@@ -41,6 +41,3 @@
                 [value (in-value (accessor u))]
                 #:when value)
     (values key value)))
-
-(module+ test
-  (require rackunit))

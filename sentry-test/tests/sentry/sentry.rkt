@@ -11,6 +11,14 @@
 (provide
  sentry-tests)
 
+(define (make-server start)
+  (define ch (make-async-channel))
+  (begin0 (serve
+           #:confirmation-channel ch
+           #:port 9095
+           #:dispatch (dispatch/servlet start))
+    (sync ch)))
+
 (define e (make-exn:fail "an exception" (current-continuation-marks)))
 (define sentry-tests
   (test-suite
@@ -47,18 +55,13 @@
 
        #:before
        (lambda ()
-         (define ch (make-async-channel 10))
-         (set! stop (serve
-                     #:confirmation-channel ch
-                     #:port 9095
-                     #:dispatch (dispatch/servlet
-                                 (lambda (_req)
-                                   (set! total (add1 total))
-                                   (response/empty
-                                    #:code 429
-                                    #:message #"Too Many Requests"
-                                    #:headers (list (make-header #"Retry-After" #"1")))))))
-         (sync ch))
+         (set! stop (make-server
+                     (lambda (_req)
+                       (set! total (add1 total))
+                       (response/empty
+                        #:code 429
+                        #:message #"Too Many Requests"
+                        #:headers (list (make-header #"Retry-After" #"1")))))))
 
        #:after
        (lambda ()
@@ -71,7 +74,30 @@
            (sleep 1)
            (sentry-capture-exception! e)
            (sentry-stop)
-           (check-equal? total 2))))))))
+           (check-equal? total 2)))))
+
+    (let ([stop #f])
+      (test-suite
+       "timeouts"
+
+       #:before
+       (lambda ()
+         (set! stop (make-server
+                     (lambda (_req)
+                       (sleep 15)
+                       (response/empty)))))
+
+       #:after
+       (lambda ()
+         (stop))
+
+       (test-case "times out after `send-timeout' milliseconds"
+         (parameterize ([current-sentry (make-sentry "http://test@127.0.0.1:9095/test"
+                                                     #:send-timeout-ms 1000)])
+           (define t0 (current-seconds))
+           (sentry-capture-exception! e)
+           (sentry-stop)
+           (check-true (<= (- (current-seconds) t0) 2)))))))))
 
 (module+ test
   (require rackunit/text-ui)

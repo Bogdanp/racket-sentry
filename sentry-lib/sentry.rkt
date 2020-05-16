@@ -33,11 +33,13 @@
 (define/contract (make-sentry dsn:str
                               #:backlog [backlog 128]
                               #:release [release (getenv "SENTRY_RELEASE")]
-                              #:environment [environment (getenv "SENTRY_ENVIRONMENT")])
+                              #:environment [environment (getenv "SENTRY_ENVIRONMENT")]
+                              #:send-timeout-ms [send-timeout 5000])
   (->* (string?)
        (#:backlog exact-positive-integer?
         #:release (or/c false/c non-empty-string?)
-        #:environment (or/c false/c non-empty-string?))
+        #:environment (or/c false/c non-empty-string?)
+        #:send-timeout-ms exact-positive-integer?)
        sentry?)
   (define dsn (string->url dsn:str))
   (define auth (dsn->auth dsn))
@@ -45,7 +47,7 @@
   (define custodian (make-custodian))
   (parameterize ([current-custodian custodian])
     (define chan (make-async-channel backlog))
-    (define dispatcher (make-sentry-dispatcher chan auth endpoint))
+    (define dispatcher (make-sentry-dispatcher chan auth endpoint send-timeout))
     (sentry release environment custodian chan dispatcher)))
 
 (define/contract (sentry-stop [s (current-sentry)])
@@ -82,7 +84,7 @@
       (url-path->string project-id)
       "/store/"))
 
-(define (make-sentry-dispatcher chan auth endpoint)
+(define (make-sentry-dispatcher chan auth endpoint send-timeout)
   (define endpoint:url (string->url endpoint))
   (define conn (http-conn))
 
@@ -97,26 +99,45 @@
                        #:auto-reconnect? #t)))
 
   (define (send-event! data)
-    (unless (http-conn-live? conn)
-      (connect!))
+    (define res (make-channel))
+    (define thd
+      (thread
+       (lambda ()
+         (unless (http-conn-live? conn)
+           (connect!))
 
-    (let loop ([failures 0])
-      (with-handlers ([exn:fail?
-                       (lambda (e)
-                         (cond
-                           [(zero? failures)
-                            (log-sentry-warning "request failed: ~a" (exn-message e))
-                            (connect!)
-                            (loop (add1 failures))]
+         (let loop ([failures 0])
+           (with-handlers ([exn:fail?
+                            (lambda (e)
+                              (cond
+                                [(zero? failures)
+                                 (log-sentry-warning "request failed: ~a" (exn-message e))
+                                 (connect!)
+                                 (loop (add1 failures))]
 
-                           [else
-                            (raise e)]))])
-        (http-conn-sendrecv! conn endpoint
-                             #:method "POST"
-                             #:headers (list "Content-type: application/json; charset=utf-8"
-                                             (~a "User-Agent: racket-sentry/" (lib-version))
-                                             (~a "X-Sentry-Auth: " auth))
-                             #:data data))))
+                                [else
+                                 (raise e)]))])
+             (call-with-values
+              (lambda ()
+                (http-conn-sendrecv! conn endpoint
+                                     #:method "POST"
+                                     #:headers (list "Content-type: application/json; charset=utf-8"
+                                                     (~a "User-Agent: racket-sentry/" (lib-version))
+                                                     (~a "X-Sentry-Auth: " auth))
+                                     #:data data))
+              (lambda vs
+                (channel-put res vs))))))))
+
+    (sync
+     (handle-evt
+      (alarm-evt (+ (current-inexact-milliseconds) send-timeout))
+      (lambda (_e)
+        (kill-thread thd)
+        (error 'timeout)))
+     (handle-evt
+      res
+      (lambda (vs)
+        (apply values vs)))))
 
   (define (dispatcher)
     (log-sentry-debug "dispatcher ready for action")
@@ -124,9 +145,7 @@
       (with-handlers ([exn:fail?
                        (lambda (e)
                          (log-sentry-error "failed to dispatch: ~a" (exn-message e))
-                         (log-sentry-warning "restarting dispatcher in 30 seconds")
-                         (sleep 30)
-                         (dispatcher))])
+                         (loop 0))])
         (match (sync chan)
           ['stop
            (log-sentry-debug "received stop event")
@@ -134,16 +153,16 @@
 
           [(and (? event?) e)
            #:when (< (current-inexact-milliseconds) rate-limit-deadline)
-           (log-sentry-warning "dropping event ~v due to rate limit" e)
+           (log-sentry-warning "dropping event ~.s due to rate limit" e)
            (loop rate-limit-deadline)]
 
           [(and (? event?) e)
-           (log-sentry-debug "capturing event ~v" e)
+           (log-sentry-debug "capturing event ~.s" e)
            (define-values (status headers out)
              (send-event! (jsexpr->bytes (event->jsexpr e))))
 
            (define data (port->bytes out))
-           (log-sentry-debug "received response~n  status: ~.s~n  data: ~.s" status data)
+           (log-sentry-debug "received response~n  status: ~.s~n  headers: ~.s~n  data: ~.s" status headers data)
            (match status
              [(regexp #px"HTTP.... 429 ")
               (log-sentry-warning "rate limit reached")
@@ -152,12 +171,12 @@
                  (string->number
                   (bytes->string/utf-8
                    (or (headers-ref headers #"retry-after") #"")))
-                 30))
+                 15))
 
               (log-sentry-warning "dropping all events for the next ~a seconds" retry-after)
               (loop (+ (current-inexact-milliseconds) (* retry-after 1000)))]
 
-             [(regexp #px"HTTP.... 20. ")
+             [(regexp #px"HTTP.... 200 ")
               (log-sentry-debug "event captured successfully")
               (loop 0)]
 

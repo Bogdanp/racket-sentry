@@ -3,11 +3,7 @@
 (require gregor
          net/url
          racket/contract
-         racket/date
          racket/format
-         racket/function
-         racket/hash
-         racket/match
          racket/string
          web-server/http/request-structs
          "user.rkt")
@@ -52,28 +48,11 @@
          tags
          user))
 
-(define OPTIONAL-EVENT-ACCESSORS
-  (hasheq 'transaction event-transaction
-          'server_name event-server-name
-          'environment event-environment
-          'release event-release
-          'request (lambda (e)
-                     (define request (event-request e))
-                     (and request (request->jsexpr request)))
-          'tags event-tags
-          'user (lambda (e)
-                  (define user (event-user e))
-                  (and user (sentry-user->jsexpr user)))))
-
 (define (event->jsexpr e)
-  (for/fold ([data (hasheq 'platform "other"
-                           'level (symbol->string (event-level e))
-                           'timestamp (moment->iso8601 (event-timestamp e))
-                           'exception (exn->jsexpr (event-e e)))])
-            ([(key accessor) (in-hash OPTIONAL-EVENT-ACCESSORS)])
-    (cond
-      [(accessor e) => (curry hash-set data key)]
-      [else data])))
+  (for*/hasheq ([(key accessor) (in-hash accessors)]
+                [value (in-value (accessor e))]
+                #:when value)
+    (values key value)))
 
 (define (exn->jsexpr e)
   (define ctx (continuation-mark-set->context (exn-continuation-marks e)))
@@ -82,21 +61,39 @@
                                 'stacktrace (hasheq 'frames (ctx->jsexpr ctx))))))
 
 (define (ctx->jsexpr ctx)
-  (reverse
-   (for/list ([frame (in-list ctx)])
-     (match-define (cons proc loc) frame)
-     (hash-union
-      (hash 'function (~a (or proc 'unknown)))
-      (if loc
-          (hasheq 'abs_path (if (path? (srcloc-source loc))
-                                (path->string (srcloc-source loc))
-                                (~a (srcloc-source loc)))
-                  'lineno (or (srcloc-line loc) 0))
-          (hasheq))))))
+  (for*/list ([frame (in-list (reverse ctx))]
+              [proc (in-value (car frame))]
+              [loc (in-value (cdr frame))]
+              [fun (in-value (~a (or proc 'unknown)))])
+    (if loc
+        (hasheq 'function fun
+                'abs_path (if (path? (srcloc-source loc))
+                              (path->string (srcloc-source loc))
+                              (~a (srcloc-source loc)))
+                'lineno (or (srcloc-line loc) 0))
+        (hasheq 'function fun))))
 
 (define (request->jsexpr req)
   (hasheq 'url (url->string (request-uri req))
           'method (bytes->string/utf-8 (request-method req))
-          'headers (for/hash ([hdr (in-list (request-headers/raw req))])
+          'headers (for/hasheq ([hdr (in-list (request-headers/raw req))])
                      (values (string->symbol (bytes->string/utf-8 (header-field hdr)))
                              (bytes->string/utf-8 (header-value hdr))))))
+
+(define accessors
+  (hasheq
+   'platform (lambda (_) "other")
+   'level (compose1 symbol->string event-level)
+   'timestamp (compose1 moment->iso8601 event-timestamp)
+   'exception (compose1 exn->jsexpr event-e)
+   'transaction event-transaction
+   'server_name event-server-name
+   'environment event-environment
+   'release event-release
+   'request (lambda (e)
+              (define request (event-request e))
+              (and request (request->jsexpr request)))
+   'tags event-tags
+   'user (lambda (e)
+           (define user (event-user e))
+           (and user (sentry-user->jsexpr user)))))
