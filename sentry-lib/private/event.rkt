@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require gregor
+         json
          mzlib/os
          net/url
          racket/contract
@@ -10,11 +11,30 @@
          "user.rkt")
 
 (provide
+ make-breadcrumb
+
  make-event
  (struct-out event)
+ event-attach-breadcrumbs
  event->jsexpr)
 
-(struct event (e level timestamp transaction server-name environment release request tags user)
+(struct breadcrumb (timestamp category level message data)
+  #:transparent)
+
+(define/contract (make-breadcrumb #:message message
+                                  #:timestamp [timestamp (now/moment)]
+                                  #:category [category 'log]
+                                  #:level [level 'warning]
+                                  #:data [data #f])
+  (->* (#:message string?)
+       (#:timestamp moment?
+        #:category (or/c 'log)
+        #:level (or/c #f 'debug 'info 'warning 'error 'fatal)
+        #:data (or/c #f jsexpr?))
+       breadcrumb?)
+  (breadcrumb timestamp category level message data))
+
+(struct event (e level timestamp transaction server-name environment release request tags user breadcrumbs)
   #:transparent)
 
 (define/contract (make-event e
@@ -26,7 +46,8 @@
                              #:release [release #f]
                              #:request [request #f]
                              #:tags [tags (hash)]
-                             #:user [user (current-sentry-user)])
+                             #:user [user (current-sentry-user)]
+                             #:breadcrumbs [breadcrumbs null])
   (->* (exn?)
        (#:level (or/c 'fatal 'error 'warning 'info 'debug)
         #:timestamp moment?
@@ -36,7 +57,8 @@
         #:release (or/c false/c non-empty-string?)
         #:request (or/c false/c request?)
         #:tags (hash/c non-empty-string? string?)
-        #:user (or/c false/c sentry-user?))
+        #:user (or/c false/c sentry-user?)
+        #:breadcrumbs (listof breadcrumb?))
        event?)
   (event e
          level
@@ -47,7 +69,12 @@
          release
          request
          tags
-         user))
+         user
+         breadcrumbs))
+
+(define/contract (event-attach-breadcrumbs e crumbs)
+  (-> event? (listof breadcrumb?) event?)
+  (struct-copy event e [breadcrumbs crumbs]))
 
 (define (event->jsexpr e)
   (for*/hasheq ([(key accessor) (in-hash accessors)]
@@ -73,6 +100,14 @@
                               (~a (srcloc-source loc)))
                 'lineno (or (srcloc-line loc) 0))
         (hasheq 'function fun))))
+
+(define (breadcrumb->jsexpr crumb)
+  (hasheq
+   'timestamp (moment->iso8601 (breadcrumb-timestamp crumb))
+   'category (symbol->string (breadcrumb-category crumb))
+   'message (breadcrumb-message crumb)
+   'level (symbol->string (breadcrumb-level crumb))
+   'data (or (breadcrumb-data crumb) (hasheq))))
 
 (define (request->jsexpr req)
   (hasheq 'url (url->string (request-uri req))
@@ -112,4 +147,8 @@
            (define user (event-user e))
            (and user (sentry-user->jsexpr user)))
    'contexts (lambda (_)
-               contexts)))
+               contexts)
+   'breadcrumbs (lambda (e)
+                  (define crumbs (event-breadcrumbs e))
+                  (and (not (zero? (length crumbs)))
+                       (hasheq 'values (map breadcrumb->jsexpr (event-breadcrumbs e)))))))

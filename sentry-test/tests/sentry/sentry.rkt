@@ -40,6 +40,14 @@
                                #:environment "test"
                                #:release "0.0.1"))
         (sentry-capture-exception! e c)
+        (sentry-stop c))
+
+      (test-case "can capture exceptions with breadcrumbs"
+        (define c (make-sentry test-dsn
+                               #:environment "test"
+                               #:release "0.0.1"))
+        (log-warning "oh no, something bad is happening!")
+        (sentry-capture-exception! (exn:fail "an exception with crumbs" (current-continuation-marks)) c)
         (sentry-stop c)))
 
     (when test-dsn

@@ -33,13 +33,15 @@
                               #:release [release (getenv "SENTRY_RELEASE")]
                               #:environment [environment (getenv "SENTRY_ENVIRONMENT")]
                               #:connect-timeout-ms [connect-timeout 5000]
-                              #:send-timeout-ms [send-timeout 5000])
+                              #:send-timeout-ms [send-timeout 5000]
+                              #:max-breadcrumbs [max-breadcrumbs 50])
   (->* (string?)
        (#:backlog exact-positive-integer?
         #:release (or/c false/c non-empty-string?)
         #:environment (or/c false/c non-empty-string?)
         #:connect-timeout-ms exact-positive-integer?
-        #:send-timeout-ms exact-positive-integer?)
+        #:send-timeout-ms exact-positive-integer?
+        #:max-breadcrumbs exact-positive-integer?)
        sentry?)
   (define dsn (string->url dsn:str))
   (define auth (dsn->auth dsn))
@@ -51,7 +53,7 @@
       (make-timeout-config
        #:connect (/ connect-timeout 1000)
        #:request (/ send-timeout 1000)))
-    (define dispatcher (make-sentry-dispatcher chan auth endpoint timeouts))
+    (define dispatcher (make-sentry-dispatcher chan auth endpoint timeouts max-breadcrumbs))
     (sentry release environment custodian chan dispatcher)))
 
 (define/contract (sentry-stop [s (current-sentry)])
@@ -97,7 +99,8 @@
         [("https") 443]
         [else      80])))
 
-(define (make-sentry-dispatcher chan auth endpoint timeouts)
+(define (make-sentry-dispatcher chan auth endpoint timeouts max-breadcrumbs)
+  (define recv (make-log-receiver (current-logger) 'warning))
   (define sess (make-session))
   (define heads
     (hasheq
@@ -106,54 +109,77 @@
   (parameterize ([current-session sess])
     (define (dispatcher)
       (log-sentry-debug "dispatcher ready for action")
-      (let loop ([rate-limit-deadline 0])
+      (let loop ([rate-limit-deadline 0]
+                 [breadcrumbs null])
         (with-handlers ([exn:fail?
                          (lambda (e)
                            (log-sentry-error "dispatch failed: ~a" (exn-message e))
-                           (loop 0))])
-          (match (sync chan)
-            ['(stop)
-             (log-sentry-debug "received stop event")
-             (session-close! sess)]
+                           (loop 0 breadcrumbs))])
+          (sync
+           (handle-evt
+            recv
+            (match-lambda
+              [(vector level message value topic)
+               (define crumb
+                 (make-breadcrumb
+                  #:category 'log
+                  #:message message
+                  #:level level
+                  #:data (hasheq
+                          'topic (~a topic)
+                          'value (~s value))))
+               (define breadcrumbs*
+                 (cons crumb breadcrumbs))
+               (loop rate-limit-deadline
+                     (cond
+                       [(< (length breadcrumbs*) max-breadcrumbs) breadcrumbs*]
+                       [else (take breadcrumbs* max-breadcrumbs)]))]))
 
-            [(? event? e)
-             #:when (< (current-inexact-milliseconds) rate-limit-deadline)
-             (log-sentry-warning "dropping event ~.s due to rate limit" e)
-             (loop rate-limit-deadline)]
+           (handle-evt
+            chan
+            (match-lambda
+              ['(stop)
+               (log-sentry-debug "received stop event")
+               (session-close! sess)]
 
-            [(? event? e)
-             (log-sentry-debug "capturing event ~.s" e)
-             (define res
-               (post endpoint
-                     #:data (gzip-payload (json-payload (event->jsexpr e)))
-                     #:headers heads
-                     #:timeouts timeouts))
+              [(? event? e)
+               #:when (< (current-inexact-milliseconds) rate-limit-deadline)
+               (log-sentry-warning "dropping event ~.s due to rate limit" e)
+               (loop rate-limit-deadline breadcrumbs)]
 
-             (log-sentry-debug
-              "received response~n  status: ~.s~n  headers: ~.s~n  data: ~.s"
-              (response-status-code res)
-              (response-headers res)
-              (response-body res))
-             (match res
-               [(response #:status-code 429)
-                (log-sentry-warning "rate limit reached")
-                (define retry-after
-                  (or
-                   (string->number
-                    (bytes->string/utf-8
-                     (or (response-headers-ref res 'retry-after) #"")))
-                   15))
+              [(? event? e)
+               (log-sentry-debug "capturing event ~.s" e)
+               (define res
+                 (post endpoint
+                       #:data (gzip-payload (json-payload (event->jsexpr (event-attach-breadcrumbs e breadcrumbs))))
+                       #:headers heads
+                       #:timeouts timeouts))
 
-                (log-sentry-warning "dropping all events for the next ~a seconds" retry-after)
-                (loop (+ (current-inexact-milliseconds) (* retry-after 1000)))]
+               (log-sentry-debug
+                "received response~n  status: ~.s~n  headers: ~.s~n  data: ~.s"
+                (response-status-code res)
+                (response-headers res)
+                (response-body res))
+               (match res
+                 [(response #:status-code 429)
+                  (log-sentry-warning "rate limit reached")
+                  (define retry-after
+                    (or
+                     (string->number
+                      (bytes->string/utf-8
+                       (or (response-headers-ref res 'retry-after) #"")))
+                     15))
 
-               [(response #:status-code 200)
-                (log-sentry-debug "event captured successfully")
-                (loop 0)]
+                  (log-sentry-warning "dropping all events for the next ~a seconds" retry-after)
+                  (loop (+ (current-inexact-milliseconds) (* retry-after 1000)) null)]
 
-               [(response #:status-code status #:headers () headers #:body data)
-                (log-sentry-warning "unexpected response from Sentry~n  status: ~.s~n  headers: ~.s~n  data ~.s" status headers data)
-                (loop 0)])]))))
+                 [(response #:status-code 200)
+                  (log-sentry-debug "event captured successfully")
+                  (loop 0 null)]
+
+                 [(response #:status-code status #:headers () headers #:body data)
+                  (log-sentry-warning "unexpected response from Sentry~n  status: ~.s~n  headers: ~.s~n  data ~.s" status headers data)
+                  (loop 0 null)])]))))))
 
     (thread dispatcher)))
 
