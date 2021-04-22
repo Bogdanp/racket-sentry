@@ -76,7 +76,7 @@
                        (response/output
                         #:code 429
                         #:message #"Too Many Requests"
-                        #:headers (list (make-header #"Retry-After" #"2"))
+                        #:headers (list (make-header #"Retry-After" #"1"))
                         void)))))
 
        #:after
@@ -87,8 +87,10 @@
          (parameterize ([current-sentry (make-sentry "http://test@127.0.0.1:9095/test")])
            (for ([_ (in-range 10)])
              (sentry-capture-exception! e))
-           (sleep 2)
+           (sleep 1.1)
+           (sync (system-idle-evt))
            (sentry-capture-exception! e)
+           (sync (system-idle-evt))
            (sentry-stop)
            (check-equal? (unbox total) 2)))))
 
