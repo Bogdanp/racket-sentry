@@ -1,8 +1,6 @@
 #lang racket/base
 
-(require file/gzip
-         json
-         net/http-client
+(require net/http-easy
          net/url
          racket/async-channel
          racket/contract
@@ -12,7 +10,6 @@
          racket/port
          racket/string
          "private/event.rkt"
-         "private/http.rkt"
          "private/reflect.rkt")
 
 (provide
@@ -35,11 +32,13 @@
                               #:backlog [backlog 128]
                               #:release [release (getenv "SENTRY_RELEASE")]
                               #:environment [environment (getenv "SENTRY_ENVIRONMENT")]
+                              #:connect-timeout-ms [connect-timeout 5000]
                               #:send-timeout-ms [send-timeout 5000])
   (->* (string?)
        (#:backlog exact-positive-integer?
         #:release (or/c false/c non-empty-string?)
         #:environment (or/c false/c non-empty-string?)
+        #:connect-timeout-ms exact-positive-integer?
         #:send-timeout-ms exact-positive-integer?)
        sentry?)
   (define dsn (string->url dsn:str))
@@ -48,12 +47,16 @@
   (define custodian (make-custodian))
   (parameterize ([current-custodian custodian])
     (define chan (make-async-channel backlog))
-    (define dispatcher (make-sentry-dispatcher chan auth endpoint send-timeout))
+    (define timeouts
+      (make-timeout-config
+       #:connect (/ connect-timeout 1000)
+       #:request (/ send-timeout 1000)))
+    (define dispatcher (make-sentry-dispatcher chan auth endpoint timeouts))
     (sentry release environment custodian chan dispatcher)))
 
 (define/contract (sentry-stop [s (current-sentry)])
   (->* () (sentry?) void?)
-  (async-channel-put (sentry-chan s) 'stop)
+  (async-channel-put (sentry-chan s) '(stop))
   (thread-wait (sentry-dispatcher s))
   (custodian-shutdown-all (sentry-custodian s)))
 
@@ -85,113 +88,74 @@
       (url-path->string project-id)
       "/store/"))
 
-(define (make-sentry-dispatcher chan auth endpoint send-timeout)
-  (define endpoint:url (string->url endpoint))
-  (define conn (http-conn))
+(define (url-path->string p)
+  (string-join (map path/param-path p) "/"))
 
-  (define (connect!)
-    (with-handlers ([exn:fail?
-                     (lambda (e)
-                       (log-sentry-error "failed to connect: ~a" (exn-message e)))])
-      (http-conn-open! conn
-                       (url-host endpoint:url)
-                       #:port (url-port/safe endpoint:url)
-                       #:ssl? (url-ssl? endpoint:url)
-                       #:auto-reconnect? #t)))
+(define (url-port/safe u)
+  (or (url-port u)
+      (case (url-scheme u)
+        [("https") 443]
+        [else      80])))
 
-  (define (send-event! data)
-    (define res (make-channel))
-    (define thd
-      (thread
-       (lambda ()
-         (unless (http-conn-live? conn)
-           (connect!))
+(define (make-sentry-dispatcher chan auth endpoint timeouts)
+  (define sess (make-session))
+  (define heads
+    (hasheq
+     'user-agent (~a "racket-sentry/" (lib-version))
+     'x-sentry-auth auth))
+  (parameterize ([current-session sess])
+    (define (dispatcher)
+      (log-sentry-debug "dispatcher ready for action")
+      (let loop ([rate-limit-deadline 0])
+        (with-handlers ([exn:fail?
+                         (lambda (e)
+                           (log-sentry-error "dispatch failed: ~a" (exn-message e))
+                           (loop 0))])
+          (match (sync chan)
+            ['(stop)
+             (log-sentry-debug "received stop event")
+             (session-close! sess)]
 
-         (define data/compressed
-           (call-with-output-bytes
-            (lambda (out)
-              (gzip-through-ports (open-input-bytes data) out #f (current-seconds)))))
+            [(? event? e)
+             #:when (< (current-inexact-milliseconds) rate-limit-deadline)
+             (log-sentry-warning "dropping event ~.s due to rate limit" e)
+             (loop rate-limit-deadline)]
 
-         (let loop ([failures 0])
-           (with-handlers ([exn:fail?
-                            (lambda (e)
-                              (cond
-                                [(zero? failures)
-                                 (log-sentry-warning "request failed: ~a" (exn-message e))
-                                 (connect!)
-                                 (loop (add1 failures))]
+            [(? event? e)
+             (log-sentry-debug "capturing event ~.s" e)
+             (define res
+               (post endpoint
+                     #:data (gzip-payload (json-payload (event->jsexpr e)))
+                     #:headers heads
+                     #:timeouts timeouts))
 
-                                [else
-                                 (raise e)]))])
-             (call-with-values
-              (lambda ()
-                (http-conn-sendrecv! conn endpoint
-                                     #:method "POST"
-                                     #:headers (list "Content-encoding: gzip"
-                                                     "Content-type: application/json; charset=utf-8"
-                                                     (~a "User-Agent: racket-sentry/" (lib-version))
-                                                     (~a "X-Sentry-Auth: " auth))
-                                     #:data data/compressed))
-              (lambda vs
-                (channel-put res vs))))))))
+             (log-sentry-debug
+              "received response~n  status: ~.s~n  headers: ~.s~n  data: ~.s"
+              (response-status-code res)
+              (response-headers res)
+              (response-body res))
+             (match res
+               [(response #:status-code 429)
+                (log-sentry-warning "rate limit reached")
+                (define retry-after
+                  (or
+                   (string->number
+                    (bytes->string/utf-8
+                     (or (response-headers-ref res 'retry-after) #"")))
+                   15))
 
-    (sync
-     (handle-evt
-      (alarm-evt (+ (current-inexact-milliseconds) send-timeout))
-      (lambda (_e)
-        (kill-thread thd)
-        (error 'timeout)))
-     (handle-evt
-      res
-      (lambda (vs)
-        (apply values vs)))))
+                (log-sentry-warning "dropping all events for the next ~a seconds" retry-after)
+                (loop (+ (current-inexact-milliseconds) (* retry-after 1000)))]
 
-  (define (dispatcher)
-    (log-sentry-debug "dispatcher ready for action")
-    (let loop ([rate-limit-deadline 0])
-      (with-handlers ([exn:fail?
-                       (lambda (e)
-                         (log-sentry-error "failed to dispatch: ~a" (exn-message e))
-                         (loop 0))])
-        (match (sync chan)
-          ['stop
-           (log-sentry-debug "received stop event")
-           (http-conn-close! conn)]
+               [(response #:status-code 200)
+                (log-sentry-debug "event captured successfully")
+                (loop 0)]
 
-          [(and (? event?) e)
-           #:when (< (current-inexact-milliseconds) rate-limit-deadline)
-           (log-sentry-warning "dropping event ~.s due to rate limit" e)
-           (loop rate-limit-deadline)]
+               [(response #:status-code status #:headers () headers #:body data)
+                (log-sentry-warning "unexpected response from Sentry~n  status: ~.s~n  headers: ~.s~n  data ~.s" status headers data)
+                (loop 0)])]))))
 
-          [(and (? event?) e)
-           (log-sentry-debug "capturing event ~.s" e)
-           (define-values (status headers out)
-             (send-event! (jsexpr->bytes (event->jsexpr e))))
-
-           (define data (port->bytes out))
-           (log-sentry-debug "received response~n  status: ~.s~n  headers: ~.s~n  data: ~.s" status headers data)
-           (match status
-             [(regexp #px"HTTP.... 429 ")
-              (log-sentry-warning "rate limit reached")
-              (define retry-after
-                (or
-                 (string->number
-                  (bytes->string/utf-8
-                   (or (headers-ref headers #"retry-after") #"")))
-                 15))
-
-              (log-sentry-warning "dropping all events for the next ~a seconds" retry-after)
-              (loop (+ (current-inexact-milliseconds) (* retry-after 1000)))]
-
-             [(regexp #px"HTTP.... 200 ")
-              (log-sentry-debug "event captured successfully")
-              (loop 0)]
-
-             [_
-              (log-sentry-warning "unexpected response from Sentry~n  status: ~.s~n  headers: ~.s~n  data ~.s" status headers data)
-              (loop 0)])]))))
-
-  (thread dispatcher))
+    (thread dispatcher)))
 
 (define sentry-capture-exception!
   (make-keyword-procedure

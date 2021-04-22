@@ -2,7 +2,6 @@
 
 (require rackunit
          "event.rkt"
-         "http.rkt"
          "sentry.rkt"
          "user.rkt")
 
@@ -11,7 +10,6 @@
    "sentry"
 
    event-tests
-   http-tests
    sentry-tests
    user-tests))
 
