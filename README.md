@@ -13,9 +13,8 @@ server][docs].
 
 ## TODOs
 
-* [ ] Breadcrumbs
 * [ ] Sampling
 
 
 [Sentry]: https://sentry.io
-[docs]: https://docs.racket-lang.org/sentry@sentry-doc/index.html
+[docs]: https://docs.racket-lang.org/sentry/index.html
