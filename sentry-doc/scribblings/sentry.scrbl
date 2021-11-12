@@ -43,15 +43,15 @@ needs to run and you can start sending exceptions by calling
   Returns @racket[#t] when @racket[v] is a Sentry client.
 }
 
-@defparam[current-sentry client sentry?]{
+@defparam[current-sentry client (or/c #f sentry?)]{
   A parameter that can store the current Sentry client for use with
   @racket[sentry-capture-exception!].
 }
 
 @defproc[(make-sentry [dsn string?]
                       [#:backlog backlog exact-positive-integer? 128]
-                      [#:release release (or/c false/c non-empty-string?) (getenv "SENTRY_RELEASE")]
-                      [#:environment environment (or/c false/c non-empty-string?) (getenv "SENTRY_ENVIRONMENT")]) sentry?]{
+                      [#:release release (or/c #f non-empty-string?) (getenv "SENTRY_RELEASE")]
+                      [#:environment environment (or/c #f non-empty-string?) (getenv "SENTRY_ENVIRONMENT")]) sentry?]{
   Initialize a Sentry client and start the background thread that will
   send errors to the API.
 
@@ -69,13 +69,13 @@ needs to run and you can start sending exceptions by calling
 }
 
 @defproc[(sentry-capture-exception! [e exn?]
-                                    [client (or/c false/c sentry?) (current-sentry)]
+                                    [client (or/c #f sentry?) (current-sentry)]
                                     [#:level level (or/c 'fatal 'error 'warning 'info 'debug) 'error]
                                     [#:timestamp timestamp moment? (now/moment)]
-                                    [#:server-name server-name (or/c false/c non-empty-string?) #f]
-                                    [#:environment environment (or/c false/c non-empty-string?) #f]
-                                    [#:release release (or/c false/c non-empty-string?) #f]
-                                    [#:request request (or/c false/c request?) #f]
+                                    [#:server-name server-name (or/c #f non-empty-string?) #f]
+                                    [#:environment environment (or/c #f non-empty-string?) #f]
+                                    [#:release release (or/c #f non-empty-string?) #f]
+                                    [#:request request (or/c #f request?) #f]
                                     [#:tags tags (hash/c non-empty-string? string?) (hash)]
                                     [#:user user sentry-user? (current-sentry-user)]) void?]{
   Asynchronously send an error to the Sentry API.
@@ -95,7 +95,7 @@ needs to run and you can start sending exceptions by calling
   Returns @racket[#t] when @racket[v] represents a Sentry user.
 }
 
-@defparam[current-sentry-user user (or/c false/c sentry-user?)]{
+@defparam[current-sentry-user user (or/c #f sentry-user?)]{
   A parameter that keeps track of data for the current user.
 
   @racket[sentry-capture-exception!] automatically picks these values
@@ -104,10 +104,10 @@ needs to run and you can start sending exceptions by calling
 }
 
 @defproc[(make-sentry-user [#:id id non-empty-string?]
-                           [#:username username (or/c false/c non-empty-string?) #f]
-                           [#:email email (or/c false/c non-empty-string?) #f]
-                           [#:ip-address ip-address (or/c false/c non-empty-string?) #f]
-                           [#:subscription subscription (or/c false/c non-empty-string?) #f]) sentry-user?]{
+                           [#:username username (or/c #f non-empty-string?) #f]
+                           [#:email email (or/c #f non-empty-string?) #f]
+                           [#:ip-address ip-address (or/c #f non-empty-string?) #f]
+                           [#:subscription subscription (or/c #f non-empty-string?) #f]) sentry-user?]{
   Creates an object that can store various bits of information about a
   user.  These can then be passed to @racket[sentry-capture-exception!]
   to have the data be associated with an error.

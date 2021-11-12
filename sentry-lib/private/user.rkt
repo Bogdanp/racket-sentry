@@ -13,7 +13,7 @@
   #:transparent)
 
 (define/contract current-sentry-user
-  (parameter/c (or/c false/c sentry-user?))
+  (parameter/c (or/c #f sentry-user?))
   (make-parameter #f))
 
 (define/contract (make-sentry-user #:id id
@@ -22,10 +22,10 @@
                                    #:ip-address [ip-address #f]
                                    #:subscription [subscription #f])
   (->* (#:id non-empty-string?)
-       (#:username (or/c false/c non-empty-string?)
-        #:email (or/c false/c non-empty-string?)
-        #:ip-address (or/c false/c non-empty-string?)
-        #:subscription (or/c false/c non-empty-string?))
+       (#:username (or/c #f non-empty-string?)
+        #:email (or/c #f non-empty-string?)
+        #:ip-address (or/c #f non-empty-string?)
+        #:subscription (or/c #f non-empty-string?))
        sentry-user?)
   (sentry-user id username email ip-address subscription))
 

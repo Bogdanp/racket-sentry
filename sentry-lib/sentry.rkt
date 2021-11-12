@@ -25,7 +25,7 @@
   #:transparent)
 
 (define/contract current-sentry
-  (parameter/c (or/c false/c sentry?))
+  (parameter/c (or/c #f sentry?))
   (make-parameter #f))
 
 (define/contract (make-sentry dsn:str
@@ -37,8 +37,8 @@
                               #:max-breadcrumbs [max-breadcrumbs 50])
   (->* (string?)
        (#:backlog exact-positive-integer?
-        #:release (or/c false/c non-empty-string?)
-        #:environment (or/c false/c non-empty-string?)
+        #:release (or/c #f non-empty-string?)
+        #:environment (or/c #f non-empty-string?)
         #:connect-timeout-ms exact-positive-integer?
         #:send-timeout-ms exact-positive-integer?
         #:max-breadcrumbs exact-positive-integer?)
