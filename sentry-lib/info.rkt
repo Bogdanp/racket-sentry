@@ -5,6 +5,6 @@
 (define deps '("base"
                "compatibility-lib"
                "gregor-lib"
-               "http-easy"
+               "http-easy-lib"
                "web-server-lib"))
 (define build-deps '())
