@@ -5,7 +5,7 @@
                      sentry
                      web-server/http/request-structs))
 
-@title{A Sentry SDK for Racket}
+@title{Sentry SDK}
 @author[(author+email "Bogdan Popa" "bogdan@defn.io")]
 @defmodule[sentry]
 
