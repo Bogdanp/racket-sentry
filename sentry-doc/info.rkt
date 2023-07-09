@@ -2,7 +2,7 @@
 
 (define license 'BSD-3-Clause)
 (define collection "sentry")
-(define scribblings '(("scribblings/sentry.scrbl" ())))
+(define scribblings '(("scribblings/sentry.scrbl" () ("Web Development"))))
 
 (define deps '("base"))
 (define build-deps '("gregor-lib"
