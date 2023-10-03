@@ -109,12 +109,12 @@
   (parameterize ([current-session sess])
     (define (dispatcher)
       (log-sentry-debug "dispatcher ready for action")
-      (let loop ([rate-limit-deadline 0]
-                 [breadcrumbs null])
-        (with-handlers ([exn:fail?
-                         (lambda (e)
-                           (log-sentry-error "dispatch failed: ~a" (exn-message e))
-                           (loop 0 breadcrumbs))])
+      (with-handlers* ([exn:fail?
+                        (lambda (e)
+                          (log-sentry-error "dispatch failed: ~a" (exn-message e))
+                          (dispatcher))])
+        (let loop ([rate-limit-deadline 0]
+                   [breadcrumbs null])
           (sync
            (handle-evt
             recv
