@@ -70,7 +70,7 @@
           [(list key)        (values key #f)]
           [(list key secret) (values key secret)]))
 
-      (printf "Sentry sentry_version=7, sentry_client=racket-sentry/~a, " (lib-version))
+      (printf "Sentry sentry_version=7, sentry_client=~a, " lib-version)
       (printf "sentry_timestamp=~a, " (current-seconds))
       (printf "sentry_key=~a" key)
       (when secret
@@ -84,7 +84,7 @@
       "://"
       (url-host dsn)
       ":"
-      (url-port/safe dsn)
+      (url-port* dsn)
       (url-path->string path)
       "/api/"
       (url-path->string project-id)
@@ -93,7 +93,7 @@
 (define (url-path->string p)
   (string-join (map path/param-path p) "/"))
 
-(define (url-port/safe u)
+(define (url-port* u)
   (or (url-port u)
       (case (url-scheme u)
         [("https") 443]
@@ -104,7 +104,7 @@
   (define sess (make-session))
   (define heads
     (hasheq
-     'user-agent (~a "racket-sentry/" (lib-version))
+     'user-agent lib-version
      'x-sentry-auth auth))
   (parameterize ([current-session sess])
     (define (dispatcher)

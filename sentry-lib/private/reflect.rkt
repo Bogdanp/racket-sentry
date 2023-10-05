@@ -1,15 +1,17 @@
 #lang racket/base
 
 (require (for-syntax racket/base
-                     racket/path
                      setup/getinfo))
 
-(provide lib-version)
+(provide
+ lib-version)
 
 (begin-for-syntax
-  (define this-path (simplify-path (build-path (path-only (syntax-source #'here)) 'up)))
-  (define info-ref (get-info/full this-path)))
+  (define (info-ref id)
+    ((get-info '("sentry")) id)))
 
-(define-syntax (lib-version stx)
-  (syntax-case stx ()
-    [(_) (datum->syntax stx (info-ref 'version))]))
+(define-syntax (get-version stx)
+  (datum->syntax stx (info-ref 'version)))
+
+(define lib-version
+  (format "racket-sentry/~a" (get-version)))
