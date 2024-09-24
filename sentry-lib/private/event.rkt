@@ -4,62 +4,101 @@
          json
          mzlib/os
          net/url
-         racket/contract
+         racket/contract/base
          racket/format
          racket/string
          web-server/http/request-structs
          "user.rkt")
 
-(provide
- make-breadcrumb
 
- make-event
- (struct-out event)
- event-attach-breadcrumbs
- event->jsexpr)
+;; breadcrumb ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(provide
+ (contract-out
+  [make-breadcrumb
+   (->* [#:message string?]
+        [#:timestamp moment?
+         #:category (or/c 'log)
+         #:level (or/c #f 'debug 'info 'warning 'error 'fatal)
+         #:data (or/c #f jsexpr?)]
+        breadcrumb?)]))
 
 (struct breadcrumb (timestamp category level message data)
   #:transparent)
 
-(define/contract (make-breadcrumb #:message message
-                                  #:timestamp [timestamp (now/moment)]
-                                  #:category [category 'log]
-                                  #:level [level 'warning]
-                                  #:data [data #f])
-  (->* (#:message string?)
-       (#:timestamp moment?
-        #:category (or/c 'log)
-        #:level (or/c #f 'debug 'info 'warning 'error 'fatal)
-        #:data (or/c #f jsexpr?))
-       breadcrumb?)
+(define (make-breadcrumb #:message message
+                         #:timestamp [timestamp (now/moment)]
+                         #:category [category 'log]
+                         #:level [level 'warning]
+                         #:data [data #f])
   (breadcrumb timestamp category level message data))
 
-(struct event (e level timestamp transaction server-name environment release request tags user breadcrumbs)
+
+;; event ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(provide
+ (contract-out
+  [struct event
+    ([e exn?]
+     [level level/c]
+     [timestamp moment?]
+     [transaction maybe-non-empty-string/c]
+     [server-name maybe-non-empty-string/c]
+     [environment maybe-non-empty-string/c]
+     [release maybe-non-empty-string/c]
+     [request (or/c #f request?)]
+     [tags (hash/c non-empty-string? string?)]
+     [user (or/c #f sentry-user?)]
+     [breadcrumbs (listof breadcrumb?)])]
+  [make-event
+   (->* [exn?]
+        [#:level (or/c 'fatal 'error 'warning 'info 'debug)
+         #:timestamp moment?
+         #:transaction (or/c #f non-empty-string?)
+         #:server-name (or/c #f non-empty-string?)
+         #:environment (or/c #f non-empty-string?)
+         #:release (or/c #f non-empty-string?)
+         #:request (or/c #f request?)
+         #:tags (hash/c non-empty-string? string?)
+         #:user (or/c #f sentry-user?)
+         #:breadcrumbs (listof breadcrumb?)]
+        event?)]
+  [event-attach-breadcrumbs
+   (-> event? (listof breadcrumb?) event?)]
+  [event->jsexpr
+   (-> event? jsexpr?)]))
+
+(define level/c
+  (or/c 'fatal 'error 'warning 'info 'debug))
+
+(define maybe-non-empty-string/c
+  (or/c #f non-empty-string?))
+
+(struct event
+  (e
+   level
+   timestamp
+   transaction
+   server-name
+   environment
+   release
+   request
+   tags
+   user
+   breadcrumbs)
   #:transparent)
 
-(define/contract (make-event e
-                             #:level [level 'error]
-                             #:timestamp [timestamp (now/moment)]
-                             #:transaction [transaction #f]
-                             #:server-name [server-name #f]
-                             #:environment [environment #f]
-                             #:release [release #f]
-                             #:request [request #f]
-                             #:tags [tags (hash)]
-                             #:user [user (current-sentry-user)]
-                             #:breadcrumbs [breadcrumbs null])
-  (->* (exn?)
-       (#:level (or/c 'fatal 'error 'warning 'info 'debug)
-        #:timestamp moment?
-        #:transaction (or/c #f non-empty-string?)
-        #:server-name (or/c #f non-empty-string?)
-        #:environment (or/c #f non-empty-string?)
-        #:release (or/c #f non-empty-string?)
-        #:request (or/c #f request?)
-        #:tags (hash/c non-empty-string? string?)
-        #:user (or/c #f sentry-user?)
-        #:breadcrumbs (listof breadcrumb?))
-       event?)
+(define (make-event e
+                    #:level [level 'error]
+                    #:timestamp [timestamp (now/moment)]
+                    #:transaction [transaction #f]
+                    #:server-name [server-name #f]
+                    #:environment [environment #f]
+                    #:release [release #f]
+                    #:request [request #f]
+                    #:tags [tags (hash)]
+                    #:user [user (current-sentry-user)]
+                    #:breadcrumbs [breadcrumbs null])
   (event e
          level
          timestamp
@@ -72,8 +111,7 @@
          user
          breadcrumbs))
 
-(define/contract (event-attach-breadcrumbs e crumbs)
-  (-> event? (listof breadcrumb?) event?)
+(define (event-attach-breadcrumbs e crumbs)
   (struct-copy event e [breadcrumbs crumbs]))
 
 (define (event->jsexpr e)
@@ -110,11 +148,12 @@
    'data (or (breadcrumb-data crumb) (hasheq))))
 
 (define (request->jsexpr req)
-  (hasheq 'url (url->string (request-uri req))
-          'method (bytes->string/utf-8 (request-method req))
-          'headers (for/hasheq ([hdr (in-list (request-headers/raw req))])
-                     (values (string->symbol (bytes->string/utf-8 (header-field hdr)))
-                             (bytes->string/utf-8 (header-value hdr))))))
+  (hasheq
+   'url (url->string (request-uri req))
+   'method (bytes->string/utf-8 (request-method req))
+   'headers (for/hasheq ([hdr (in-list (request-headers/raw req))])
+              (values (string->symbol (bytes->string/utf-8 (header-field hdr)))
+                      (bytes->string/utf-8 (header-value hdr))))))
 
 (define contexts
   (hasheq

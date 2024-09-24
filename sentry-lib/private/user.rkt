@@ -21,11 +21,11 @@
                                    #:email [email #f]
                                    #:ip-address [ip-address #f]
                                    #:subscription [subscription #f])
-  (->* (#:id non-empty-string?)
-       (#:username (or/c #f non-empty-string?)
+  (->* [#:id non-empty-string?]
+       [#:username (or/c #f non-empty-string?)
         #:email (or/c #f non-empty-string?)
         #:ip-address (or/c #f non-empty-string?)
-        #:subscription (or/c #f non-empty-string?))
+        #:subscription (or/c #f non-empty-string?)]
        sentry-user?)
   (sentry-user id username email ip-address subscription))
 

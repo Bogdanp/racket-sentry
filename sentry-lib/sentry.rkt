@@ -35,13 +35,13 @@
                               #:connect-timeout-ms [connect-timeout 5000]
                               #:send-timeout-ms [send-timeout 5000]
                               #:max-breadcrumbs [max-breadcrumbs 50])
-  (->* (string?)
-       (#:backlog exact-positive-integer?
+  (->* [string?]
+       [#:backlog exact-positive-integer?
         #:release (or/c #f non-empty-string?)
         #:environment (or/c #f non-empty-string?)
         #:connect-timeout-ms exact-positive-integer?
         #:send-timeout-ms exact-positive-integer?
-        #:max-breadcrumbs exact-positive-integer?)
+        #:max-breadcrumbs exact-positive-integer?]
        sentry?)
   (define dsn (string->url dsn:str))
   (define auth (dsn->auth dsn))
@@ -57,7 +57,7 @@
     (sentry release environment custodian chan dispatcher)))
 
 (define/contract (sentry-stop [s (current-sentry)])
-  (->* () (sentry?) void?)
+  (->* [] [sentry?] void?)
   (async-channel-put (sentry-chan s) '(stop))
   (thread-wait (sentry-dispatcher s))
   (custodian-shutdown-all (sentry-custodian s)))
