@@ -3,7 +3,7 @@
 (require net/http-easy
          net/url
          racket/async-channel
-         racket/contract
+         racket/contract/base
          racket/format
          racket/list
          racket/match
@@ -13,36 +13,38 @@
          "private/reflect.rkt")
 
 (provide
- current-sentry
- make-sentry
  sentry?
  sentry-capture-exception!
- sentry-stop)
+ (contract-out
+  [current-sentry
+   (parameter/c (or/c #f sentry?))]
+  [make-sentry
+   (->* [string?]
+        [#:backlog exact-positive-integer?
+         #:release (or/c #f non-empty-string?)
+         #:environment (or/c #f non-empty-string?)
+         #:connect-timeout-ms exact-positive-integer?
+         #:send-timeout-ms exact-positive-integer?
+         #:max-breadcrumbs exact-positive-integer?]
+        sentry?)]
+  [sentry-stop
+   (->* [] [sentry?] void?)]))
 
 (define-logger sentry)
 
 (struct sentry (release environment custodian chan dispatcher)
   #:transparent)
 
-(define/contract current-sentry
-  (parameter/c (or/c #f sentry?))
+(define current-sentry
   (make-parameter #f))
 
-(define/contract (make-sentry dsn:str
-                              #:backlog [backlog 128]
-                              #:release [release (getenv "SENTRY_RELEASE")]
-                              #:environment [environment (getenv "SENTRY_ENVIRONMENT")]
-                              #:connect-timeout-ms [connect-timeout 5000]
-                              #:send-timeout-ms [send-timeout 5000]
-                              #:max-breadcrumbs [max-breadcrumbs 50])
-  (->* [string?]
-       [#:backlog exact-positive-integer?
-        #:release (or/c #f non-empty-string?)
-        #:environment (or/c #f non-empty-string?)
-        #:connect-timeout-ms exact-positive-integer?
-        #:send-timeout-ms exact-positive-integer?
-        #:max-breadcrumbs exact-positive-integer?]
-       sentry?)
+(define (make-sentry dsn:str
+                     #:backlog [backlog 128]
+                     #:release [release (getenv "SENTRY_RELEASE")]
+                     #:environment [environment (getenv "SENTRY_ENVIRONMENT")]
+                     #:connect-timeout-ms [connect-timeout 5000]
+                     #:send-timeout-ms [send-timeout 5000]
+                     #:max-breadcrumbs [max-breadcrumbs 50])
   (define dsn (string->url dsn:str))
   (define auth (dsn->auth dsn))
   (define endpoint (dsn->endpoint dsn))
@@ -56,8 +58,7 @@
     (define dispatcher (make-sentry-dispatcher chan auth endpoint timeouts max-breadcrumbs))
     (sentry release environment custodian chan dispatcher)))
 
-(define/contract (sentry-stop [s (current-sentry)])
-  (->* [] [sentry?] void?)
+(define (sentry-stop [s (current-sentry)])
   (async-channel-put (sentry-chan s) '(stop))
   (thread-wait (sentry-dispatcher s))
   (custodian-shutdown-all (sentry-custodian s)))

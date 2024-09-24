@@ -1,32 +1,33 @@
 #lang racket/base
 
-(require racket/contract
+(require racket/contract/base
          racket/string)
 
 (provide
- current-sentry-user
- make-sentry-user
  sentry-user?
- sentry-user->jsexpr)
+ sentry-user->jsexpr
+ (contract-out
+  [current-sentry-user
+   (parameter/c (or/c #f sentry-user?))]
+  [make-sentry-user
+   (->* [#:id non-empty-string?]
+        [#:username (or/c #f non-empty-string?)
+         #:email (or/c #f non-empty-string?)
+         #:ip-address (or/c #f non-empty-string?)
+         #:subscription (or/c #f non-empty-string?)]
+        sentry-user?)]))
 
 (struct sentry-user (id username email ip-address subscription)
   #:transparent)
 
-(define/contract current-sentry-user
-  (parameter/c (or/c #f sentry-user?))
+(define current-sentry-user
   (make-parameter #f))
 
-(define/contract (make-sentry-user #:id id
-                                   #:username [username #f]
-                                   #:email [email #f]
-                                   #:ip-address [ip-address #f]
-                                   #:subscription [subscription #f])
-  (->* [#:id non-empty-string?]
-       [#:username (or/c #f non-empty-string?)
-        #:email (or/c #f non-empty-string?)
-        #:ip-address (or/c #f non-empty-string?)
-        #:subscription (or/c #f non-empty-string?)]
-       sentry-user?)
+(define (make-sentry-user #:id id
+                          #:username [username #f]
+                          #:email [email #f]
+                          #:ip-address [ip-address #f]
+                          #:subscription [subscription #f])
   (sentry-user id username email ip-address subscription))
 
 (define accessors
