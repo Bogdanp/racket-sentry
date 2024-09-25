@@ -64,7 +64,8 @@
       (sentry-stop c))
 
     (let ([stop #f]
-          [total (box 0)])
+          [total (box 0)]
+          [sema (make-semaphore)])
       (test-suite
        "retries"
 
@@ -73,6 +74,12 @@
          (set! stop (make-server
                      (lambda (_req)
                        (box-update! total add1)
+                       (define thd
+                         (current-thread))
+                       (thread
+                        (lambda ()
+                          (sync (thread-dead-evt thd))
+                          (semaphore-post sema)))
                        (response/output
                         #:code 429
                         #:message #"Too Many Requests"
@@ -85,6 +92,8 @@
 
        (test-case "respects rate limits"
          (parameterize ([current-sentry (make-sentry "http://test@127.0.0.1:9095/test")])
+           (sentry-capture-exception! e)
+           (semaphore-wait sema)
            (for ([_ (in-range 10)])
              (sentry-capture-exception! e))
            (sleep 1.1)
@@ -142,7 +151,7 @@
            (for ([_ (in-range 100)])
              (sentry-capture-exception! e))
            (sentry-stop)
-           (check-equal? (unbox total) 2))))))))
+           (check-equal? (unbox total) 1))))))))
 
 (module+ test
   (require rackunit/text-ui)

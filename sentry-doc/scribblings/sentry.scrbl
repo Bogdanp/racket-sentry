@@ -44,28 +44,27 @@ needs to run and you can start sending exceptions by calling
 }
 
 @defparam[current-sentry client (or/c #f sentry?)]{
-  A parameter that can store the current Sentry client for use with
+  Stores the current Sentry client for use with
   @racket[sentry-capture-exception!].
 }
 
 @defproc[(make-sentry [dsn string?]
                       [#:backlog backlog exact-positive-integer? 128]
                       [#:release release (or/c #f non-empty-string?) (getenv "SENTRY_RELEASE")]
-                      [#:environment environment (or/c #f non-empty-string?) (getenv "SENTRY_ENVIRONMENT")]) sentry?]{
-  Initialize a Sentry client and start the background thread that will
-  send errors to the API.
+                      [#:environment environment (or/c #f non-empty-string?) (getenv "SENTRY_ENVIRONMENT")])
+                      sentry?]{
 
-  @racket[backlog] specifies the size of the error queue.  When the
-  queue fills up, calls to @racket[sentry-capture-exception!] will
-  start to silently drop events.
+  Returns a Sentry client.
 
-  @racket[release] can be set to tag each error with the current
-  release (usually a GIT SHA).
+  The @racket[#:backlog] argument controls the size of the error queue.
+  Events are dropped silently when the queue is full.
 
-  @racket[environment] can be set to tag each error with the current
-  environment (eg. "production" or "staging").
+  When the @racket[#:release] argument is set, every event's
+  @tt{release} field is tagged with the given value. Ditto for the
+  @racket[#:environment] argument and the @tt{environment} field on
+  events.
 
-  Sentry clients log messages to the @racket['sentry] topic.
+  The reutrned client logs messages to the @racket['sentry] topic.
 }
 
 @defproc[(sentry-capture-exception! [e exn?]
@@ -77,10 +76,14 @@ needs to run and you can start sending exceptions by calling
                                     [#:release release (or/c #f non-empty-string?) #f]
                                     [#:request request (or/c #f request?) #f]
                                     [#:tags tags (hash/c non-empty-string? string?) (hash)]
-                                    [#:user user sentry-user? (current-sentry-user)]) void?]{
-  Asynchronously send an error to the Sentry API.
+                                    [#:user user sentry-user? (current-sentry-user)])
+                                    (evt/c void?)]{
 
-  Does nothing when @racket[client] is @racket[#f].
+  Sends @racket[e] to Sentry. Returns a synchronizable event that is
+  ready for synchronization when the event leaves the queue, which means
+  either that it has been sent to the Sentry API or that it has been
+  dropped due to rate limits. When @racket[client] is @racket[#f], all
+  events are dropped.
 }
 
 @defproc[(sentry-stop [client sentry? (current-sentry)]) void?]{
@@ -97,20 +100,16 @@ needs to run and you can start sending exceptions by calling
 
 @defparam[current-sentry-user user (or/c #f sentry-user?)]{
   A parameter that keeps track of data for the current user.
-
-  @racket[sentry-capture-exception!] automatically picks these values
-  up unless a different value is specified via its @racket[#:user]
-  argument.
 }
 
 @defproc[(make-sentry-user [#:id id non-empty-string?]
                            [#:username username (or/c #f non-empty-string?) #f]
                            [#:email email (or/c #f non-empty-string?) #f]
                            [#:ip-address ip-address (or/c #f non-empty-string?) #f]
-                           [#:subscription subscription (or/c #f non-empty-string?) #f]) sentry-user?]{
+                           [#:subscription subscription (or/c #f non-empty-string?) #f])
+                           sentry-user?]{
+
   Creates an object that can store various bits of information about a
-  user.  These can then be passed to @racket[sentry-capture-exception!]
+  user. These can then be passed to @racket[sentry-capture-exception!]
   to have the data be associated with an error.
 }
-
-@index-section[]
