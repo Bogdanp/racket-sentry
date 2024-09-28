@@ -5,6 +5,7 @@
          racket/contract/base
          racket/format
          racket/os
+         racket/promise
          racket/string
          web-server/http/request-structs
          "date.rkt"
@@ -134,11 +135,13 @@
               [proc (in-value (car frame))]
               [loc (in-value (cdr frame))]
               [fun (in-value (~a (or proc 'unknown)))])
+    (define path
+      (and loc (if (path? (srcloc-source loc))
+                   (path->string (srcloc-source loc))
+                   (~a (srcloc-source loc)))))
     (if loc
         {function fun
-         abs_path (if (path? (srcloc-source loc))
-                      (path->string (srcloc-source loc))
-                      (~a (srcloc-source loc)))
+         abs_path path
          lineno (or (srcloc-line loc) 0)}
         {function fun})))
 
@@ -157,13 +160,14 @@
                      (bytes->string/utf-8 (header-value hdr))))})
 
 (define contexts
-  {device {name (gethostname)}
-   os {raw_description (system-type 'machine)}
-   runtime {name (case (system-type 'vm)
-                   [(racket) "Racket BC"]
-                   [(chez-scheme) "Racket CS"]
-                   [else (format "Racket ~a" (system-type 'vm))])
-            version (version)}})
+  (delay/sync
+   {device {name (gethostname)}
+    os {raw_description (system-type 'machine)}
+    runtime {name (case (system-type 'vm)
+                    [(racket) "Racket BC"]
+                    [(chez-scheme) "Racket CS"]
+                    [else (format "Racket ~a" (system-type 'vm))])
+             version (version)}}))
 
 (define accessors
   {platform (λ (_) "other")
@@ -181,7 +185,7 @@
    user (lambda (e)
           (define user (event-user e))
           (and user (sentry-user->jsexpr user)))
-   contexts (λ (_) contexts)
+   contexts (λ (_) (force contexts))
    breadcrumbs (lambda (e)
                  (define crumbs (event-breadcrumbs e))
                  (and (not (null? crumbs))
