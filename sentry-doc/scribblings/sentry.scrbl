@@ -70,7 +70,7 @@ needs to run and you can start sending exceptions by calling
 @defproc[(sentry-capture-exception! [e exn?]
                                     [client (or/c #f sentry?) (current-sentry)]
                                     [#:level level (or/c 'fatal 'error 'warning 'info 'debug) 'error]
-                                    [#:timestamp timestamp moment? (now/moment)]
+                                    [#:timestamp timestamp (or/c date*? moment?) (current-utc-date)]
                                     [#:server-name server-name (or/c #f non-empty-string?) #f]
                                     [#:environment environment (or/c #f non-empty-string?) #f]
                                     [#:release release (or/c #f non-empty-string?) #f]

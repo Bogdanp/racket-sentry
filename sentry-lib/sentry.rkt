@@ -12,6 +12,7 @@
          racket/string
          threading
          "private/dsn.rkt"
+         "private/envelope.rkt"
          "private/event.rkt"
          "private/reflect.rkt")
 
@@ -142,7 +143,7 @@
          (let ([e (event-attach-breadcrumbs e crumbs)])
            (delay/thread
             (post
-             #:data (gzip-payload (json-payload (event->jsexpr e)))
+             #:data (gzip-payload (envelope-payload e))
              #:headers heads
              #:timeouts timeouts
              endpoint))))

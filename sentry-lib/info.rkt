@@ -6,8 +6,6 @@
 (define deps
   '("actor-lib"
     "base"
-    "compatibility-lib"
-    "gregor-lib"
     "http-easy-lib"
     "monocle-lib"
     "threading-lib"

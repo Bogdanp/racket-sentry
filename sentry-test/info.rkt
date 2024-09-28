@@ -5,7 +5,6 @@
 
 (define deps '())
 (define build-deps '("base"
-                     "gregor-lib"
                      "rackunit-lib"
                      "sentry-lib"
                      "threading-lib"

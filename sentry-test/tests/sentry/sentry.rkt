@@ -47,6 +47,7 @@
                                #:environment "test"
                                #:release "0.0.1"))
         (log-warning "oh no, something bad is happening!")
+        (sync (system-idle-evt))
         (sentry-capture-exception! (exn:fail "an exception with crumbs" (current-continuation-marks)) c)
         (sentry-stop c)))
 

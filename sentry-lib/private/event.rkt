@@ -1,13 +1,13 @@
 #lang racket/base
 
-(require gregor
-         json
+(require json
          net/url
          racket/contract/base
          racket/format
          racket/os
          racket/string
          web-server/http/request-structs
+         "date.rkt"
          "hasheq-sugar.rkt"
          "user.rkt")
 
@@ -18,7 +18,7 @@
  (contract-out
   [make-breadcrumb
    (->* [#:message string?]
-        [#:timestamp moment?
+        [#:timestamp any/c
          #:category (or/c 'log)
          #:level (or/c #f 'debug 'info 'warning 'error 'fatal)
          #:data (or/c #f jsexpr?)]
@@ -27,11 +27,12 @@
 (struct breadcrumb (timestamp category level message data)
   #:transparent)
 
-(define (make-breadcrumb #:message message
-                         #:timestamp [timestamp (now/moment)]
-                         #:category [category 'log]
-                         #:level [level 'warning]
-                         #:data [data #f])
+(define (make-breadcrumb
+         #:message message
+         #:timestamp [timestamp (current-utc-date)]
+         #:category [category 'log]
+         #:level [level 'warning]
+         #:data [data #f])
   (breadcrumb timestamp category level message data))
 
 
@@ -42,7 +43,7 @@
   [struct event
     ([e exn?]
      [level level/c]
-     [timestamp moment?]
+     [timestamp any/c] #;(or/c date* moment?)
      [transaction maybe-non-empty-string/c]
      [server-name maybe-non-empty-string/c]
      [environment maybe-non-empty-string/c]
@@ -54,7 +55,7 @@
   [make-event
    (->* [exn?]
         [#:level (or/c 'fatal 'error 'warning 'info 'debug)
-         #:timestamp moment?
+         #:timestamp any/c
          #:transaction (or/c #f non-empty-string?)
          #:server-name (or/c #f non-empty-string?)
          #:environment (or/c #f non-empty-string?)
@@ -89,17 +90,18 @@
    breadcrumbs)
   #:transparent)
 
-(define (make-event e
-                    #:level [level 'error]
-                    #:timestamp [timestamp (now/moment)]
-                    #:transaction [transaction #f]
-                    #:server-name [server-name #f]
-                    #:environment [environment #f]
-                    #:release [release #f]
-                    #:request [request #f]
-                    #:tags [tags (hash)]
-                    #:user [user (current-sentry-user)]
-                    #:breadcrumbs [breadcrumbs null])
+(define (make-event
+         e
+         #:level [level 'error]
+         #:timestamp [timestamp (current-utc-date)]
+         #:transaction [transaction #f]
+         #:server-name [server-name #f]
+         #:environment [environment #f]
+         #:release [release #f]
+         #:request [request #f]
+         #:tags [tags (hash)]
+         #:user [user (current-sentry-user)]
+         #:breadcrumbs [breadcrumbs null])
   (event e
          level
          timestamp
@@ -141,7 +143,7 @@
         {function fun})))
 
 (define (breadcrumb->jsexpr crumb)
-  {timestamp (moment->iso8601 (breadcrumb-timestamp crumb))
+  {timestamp (->rfc3339 (breadcrumb-timestamp crumb))
    category (symbol->string (breadcrumb-category crumb))
    message (breadcrumb-message crumb)
    level (symbol->string (breadcrumb-level crumb))
@@ -166,7 +168,7 @@
 (define accessors
   {platform (λ (_) "other")
    level (compose1 symbol->string event-level)
-   timestamp (compose1 moment->iso8601 event-timestamp)
+   timestamp (compose1 ->rfc3339 event-timestamp)
    exception (compose1 exn->jsexpr event-e)
    transaction event-transaction
    server_name event-server-name
@@ -182,8 +184,9 @@
    contexts (λ (_) contexts)
    breadcrumbs (lambda (e)
                  (define crumbs (event-breadcrumbs e))
-                 (and (not (zero? (length crumbs)))
-                      (hasheq 'values (map breadcrumb->jsexpr (event-breadcrumbs e)))))})
+                 (and (not (null? crumbs))
+                      (map breadcrumb->jsexpr crumbs)))})
+
 
 ;; Local variables:
 ;; racket-indent-sequence-depth: 1

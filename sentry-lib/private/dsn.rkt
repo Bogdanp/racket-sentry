@@ -38,7 +38,7 @@
       (url-path->string path)
       "/api/"
       (url-path->string project-id)
-      "/store/"))
+      "/envelope/"))
 
 (define (url-path->string p)
   (string-join (map path/param-path p) "/"))
