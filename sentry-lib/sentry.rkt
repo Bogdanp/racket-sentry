@@ -77,15 +77,15 @@
 
 (define sentry-capture-exception!
   (make-keyword-procedure
-   (lambda (kws kw-args e [s (current-sentry)] . args)
+   (lambda (kws kw-args err [s (current-sentry)] . args)
      (if s
          (capture
           (sentry-dispatcher s)
-          (let ([evt (keyword-apply make-event kws kw-args (cons e args))])
+          (let ([e (keyword-apply make-event kws kw-args (cons err args))])
             (struct-copy
-             event evt
-             [environment (or (event-environment evt) (sentry-environment s))]
-             [release (or (event-release evt) (sentry-release s))])))
+             event e
+             [environment (or (event-environment e) (sentry-environment s))]
+             [release (or (event-release e) (sentry-release s))])))
          (delay/sync (void))))))
 
 
@@ -122,6 +122,10 @@
 
   (define (capture st e)
     (cond
+      [(state-stopped? st)
+       (log-sentry-warning "dropping event: stopped")
+       (values st (delay/sync (void)))]
+
       [(< (current-inexact-monotonic-milliseconds)
           (state-rate-limit-deadline st))
        (log-sentry-warning "dropping event: rate limited")
