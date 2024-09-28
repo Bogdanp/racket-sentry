@@ -79,7 +79,7 @@
   (make-keyword-procedure
    (lambda (kws kw-args err [s (current-sentry)] . args)
      (if s
-         (capture
+         (send
           (sentry-dispatcher s)
           (let ([e (keyword-apply make-event kws kw-args (cons err args))])
             (struct-copy
@@ -120,7 +120,7 @@
   (lambda (_st)
     (session-close! sess))
 
-  (define (capture st e)
+  (define (send st e)
     (cond
       [(state-stopped? st)
        (log-sentry-warning "dropping event: stopped")
