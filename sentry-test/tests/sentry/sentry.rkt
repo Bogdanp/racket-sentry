@@ -3,6 +3,7 @@
 (require racket/async-channel
          rackunit
          sentry
+         sentry/tracing
          web-server/http
          web-server/servlet-dispatch
          web-server/web-server
@@ -152,7 +153,35 @@
            (for ([_ (in-range 100)])
              (sentry-capture-exception! e))
            (sentry-stop)
-           (check-equal? (unbox total) 1))))))))
+           (check-equal? (unbox total) 1))))))
+
+   (test-suite
+    "call-with-transaction"
+
+    (when test-dsn
+      (define c (make-sentry test-dsn))
+      (parameterize ([current-sentry c])
+        (call-with-transaction "GET /"
+          #:operation 'http.server
+          #:source 'url
+          #:data (hasheq
+                  'http.request.method "GET"
+                  'url.path "/"
+                  'url.scheme "http")
+          (lambda (t)
+            (call-with-span
+             #:operation 'index
+             (lambda (_s)
+               (call-with-span
+                #:operation 'db.query
+                #:description "SELECT pg_sleep(1)"
+                (lambda (_s)
+                  (sleep 1)))))
+            (call-with-span
+             #:operation 'render
+             void)
+            (span-set! t 'http.response.status_code 200))))
+      (sentry-stop c)))))
 
 (module+ test
   (require rackunit/text-ui)

@@ -11,14 +11,14 @@
          racket/promise
          racket/string
          threading
+         web-server/http/request-structs
          "private/dsn.rkt"
          "private/envelope.rkt"
          "private/event.rkt"
-         "private/reflect.rkt")
+         "private/reflect.rkt"
+         "private/user.rkt")
 
 (provide
- sentry?
- sentry-capture-exception!
  (contract-out
   [current-sentry
    (parameter/c (or/c #f sentry?))]
@@ -31,6 +31,21 @@
          #:send-timeout-ms exact-positive-integer?
          #:max-breadcrumbs exact-positive-integer?]
         sentry?)]
+  [sentry? (-> any/c boolean?)]
+  [sentry-capture-exception!
+   (->* [exn?]
+        [sentry?
+         #:level (or/c 'fatal 'error 'warning 'info 'debug)
+         #:timestamp any/c
+         #:transaction (or/c #f non-empty-string?)
+         #:server-name (or/c #f non-empty-string?)
+         #:environment (or/c #f non-empty-string?)
+         #:release (or/c #f non-empty-string?)
+         #:request (or/c #f request?)
+         #:tags (hash/c non-empty-string? string?)
+         #:user (or/c #f sentry-user?)
+         #:breadcrumbs(listof breadcrumb?)]
+        (evt/c void?))]
   [sentry-stop
    (->* [] [sentry?] void?)]))
 
@@ -80,7 +95,7 @@
   (make-keyword-procedure
    (lambda (kws kw-args err [s (current-sentry)] . args)
      (if s
-         (send
+         (capture
           (sentry-dispatcher s)
           (let ([e (keyword-apply make-event kws kw-args (cons err args))])
             (struct-copy
@@ -88,6 +103,9 @@
              [environment (or (event-environment e) (sentry-environment s))]
              [release (or (event-release e) (sentry-release s))])))
          (delay/sync (void))))))
+
+(module+ private
+  (provide capture sentry-dispatcher))
 
 
 ;; actor ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -121,7 +139,7 @@
   (lambda (_st)
     (session-close! sess))
 
-  (define (send st e)
+  (define (capture st e)
     (cond
       [(state-stopped? st)
        (log-sentry-warning "dropping event: stopped")
@@ -137,10 +155,10 @@
        (values st (delay/sync (void)))]
 
       [else
-       (define crumbs
-         (state-breadcrumbs st))
        (define promise
-         (let ([e (event-attach-breadcrumbs e crumbs)])
+         (let ([e (if (event? e)
+                      (event-attach-breadcrumbs e (state-breadcrumbs st))
+                      e)])
            (delay/thread
             (post
              #:data (gzip-payload (envelope-payload e))

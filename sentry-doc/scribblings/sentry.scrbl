@@ -1,13 +1,14 @@
 #lang scribble/manual
 
 @(require (for-label (only-in gregor moment? now/moment)
+                     json
                      racket
                      sentry
+                     sentry/tracing
                      web-server/http/request-structs))
 
 @title{Sentry SDK}
 @author[(author+email "Bogdan Popa" "bogdan@defn.io")]
-@defmodule[sentry]
 
 @section[#:tag "intro"]{Introduction}
 
@@ -37,6 +38,7 @@ needs to run and you can start sending exceptions by calling
 ]
 
 @section[#:tag "reference"]{Reference}
+@defmodule[sentry]
 @subsection{Core API}
 
 @defproc[(sentry? [v any/c]) boolean?]{
@@ -53,16 +55,13 @@ needs to run and you can start sending exceptions by calling
                       [#:release release (or/c #f non-empty-string?) (getenv "SENTRY_RELEASE")]
                       [#:environment environment (or/c #f non-empty-string?) (getenv "SENTRY_ENVIRONMENT")])
                       sentry?]{
-
   Returns a Sentry client.
 
   The @racket[#:backlog] argument controls the size of the error queue.
-  Events are dropped silently when the queue is full.
+  Events are dropped when the queue is full.
 
-  When the @racket[#:release] argument is set, every event's
-  @tt{release} field is tagged with the given value. Ditto for the
-  @racket[#:environment] argument and the @tt{environment} field on
-  events.
+  When the @racket[#:release] argument is set, every event is tagged
+  with the given value. Ditto for the @racket[#:environment] argument.
 
   The reutrned client logs messages to the @racket['sentry] topic.
 }
@@ -112,4 +111,103 @@ needs to run and you can start sending exceptions by calling
   Creates an object that can store various bits of information about a
   user. These can then be passed to @racket[sentry-capture-exception!]
   to have the data be associated with an error.
+}
+
+
+@subsection{Tracing}
+@defmodule[sentry/tracing]
+
+A @deftech{transaction} tracks a set of @tech{spans} and delivers them
+to Sentry when the transaction completes. A @deftech{span} measures and
+records information about a block of code.
+
+@defproc[(transaction? [v any/c]) boolean?]{
+  Returns @racket[#t] when @racket[v] is a @tech{transaction}.
+}
+
+@defparam[current-transaction t (or/c #f transaction?)]{
+  Holds the current transaction. The @racket[call-with-transaction]
+  procedure automatically installs a transaction in this parameter.
+}
+
+@(define annot-url "https://develop.sentry.dev/sdk/event-payloads/transaction/#transaction-annotations")
+@(define traces-url "https://develop.sentry.dev/sdk/telemetry/traces/")
+@(define span-ops-url "https://develop.sentry.dev/sdk/telemetry/traces/span-operations/")
+
+@defproc[(call-with-transaction [name string?]
+                                [proc (-> transaction? any)]
+                                [#:data data (or/c #f (hash/c symbol? jsexpr?)) #f]
+                                [#:source source symbol? 'custom]
+                                [#:trace-id trace-id (or/c #f string?) #f]
+                                [#:parent-id parent-id (or/c #f string?) #f]
+                                [#:operation operation symbol? 'function]
+                                [#:description description (or/c #f string?) #f]) any]{
+
+  Calls @racket[proc] in the context of a @tech{transaction} with the
+  given name. When the call to @racket[proc] finishes executing, the
+  transaction is sent to the @racket[current-sentry] client. If there is
+  no current client, the transaction information is discarded at the end
+  of the call.
+
+  The value passed to the @racket[name] argument should follow the
+  conventions defined for the value passed to the @racket[#:source]
+  argument. The supported @racket[#:source] values can be found in
+  Sentry's @hyperlink[annot-url]{Transaction Annotations} documentation.
+
+  The @racket[#:trace-id] and @racket[#:parent-id] may be used to
+  propagate distributed tracing ids to the new transaction. See Sentry's
+  documentation on the @hyperlink[traces-url]{sentry-trace header}
+  for details. If not provided, and the call is nested within another
+  transaction, then the parent transaction's values are inherited.
+  If there is no parent transaction, then new trace and span ids are
+  generated automatically.
+
+  The @racket[#:operation] should be one of the values listed in
+  Sentry's @hyperlink[span-ops-url]{Span Operations} documentation.
+
+  The @racket[#:description] may be an arbitrary string describing the
+  transaction in detail.
+}
+
+@defproc[(span? [v any/c]) boolean?]{
+  Returns @racket[#t] when @racket[v] is a @tech{span}.
+}
+
+@defparam[current-span s (or/c #f span?)]{
+  Holds the current span. The @racket[call-with-span] procedure
+  automatically installs a span in this parameter.
+}
+
+@defproc[(call-with-span [proc (-> span? any)]
+                         [#:operation operation symbol? 'function]
+                         [#:description description (or/c #f string?) #f]
+                         [#:origin origin symbol? 'manual]
+                         [#:data data (or/c #f (hash/c symbol? jsexpr?)) #f]) any]{
+
+  Calls @racket[proc] in the context of a @tech{span} with the given
+  @racket[#:operation] and @racket[#:description]. When the call to
+  @racket[proc] finishes executing, the span is registered with the
+  surrounding transaction. If there is no surrounding transaction, the
+  span is discarded at the end of the call.
+
+  The @racket[#:operation] should be one of the values listed in
+  Sentry's @hyperlink[span-ops-url]{Span Operations} documentation.
+
+  The @racket[#:description] may be an arbitrary string describing the
+  operation in detail.
+}
+
+@defproc[(get-span-id [v (or/c span? transaction?)]) string?]{
+  Returns the id of the given @tech{transaction} or @tech{span}.
+}
+
+@defproc[(get-trace-id [v (or/c span? transaction?)]) string?]{
+  Returns the trace id of the given @tech{transaction} or @tech{span}.
+}
+
+@defproc[(span-set! [s (or/c span? transaction?)]
+                    [k symbol?]
+                    [v jsexpr?]) void?]{
+
+  Sets @racket[k] to @racket[v] within @racket[s]'s data payload.
 }

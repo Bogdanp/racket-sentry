@@ -1,13 +1,9 @@
 #lang racket/base
 
-(require json
-         net/url
-         racket/contract/base
+(require net/url
          racket/format
-         racket/os
-         racket/promise
-         racket/string
          web-server/http/request-structs
+         "context.rkt"
          "date.rkt"
          "hasheq-sugar.rkt"
          "user.rkt")
@@ -16,14 +12,8 @@
 ;; breadcrumb ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (provide
- (contract-out
-  [make-breadcrumb
-   (->* [#:message string?]
-        [#:timestamp any/c
-         #:category (or/c 'log)
-         #:level (or/c #f 'debug 'info 'warning 'error 'fatal)
-         #:data (or/c #f jsexpr?)]
-        breadcrumb?)]))
+ make-breadcrumb
+ breadcrumb?)
 
 (struct breadcrumb (timestamp category level message data)
   #:transparent)
@@ -40,42 +30,10 @@
 ;; event ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (provide
- (contract-out
-  [struct event
-    ([e exn?]
-     [level level/c]
-     [timestamp any/c] #;(or/c date* moment?)
-     [transaction maybe-non-empty-string/c]
-     [server-name maybe-non-empty-string/c]
-     [environment maybe-non-empty-string/c]
-     [release maybe-non-empty-string/c]
-     [request (or/c #f request?)]
-     [tags (hash/c non-empty-string? string?)]
-     [user (or/c #f sentry-user?)]
-     [breadcrumbs (listof breadcrumb?)])]
-  [make-event
-   (->* [exn?]
-        [#:level (or/c 'fatal 'error 'warning 'info 'debug)
-         #:timestamp any/c
-         #:transaction (or/c #f non-empty-string?)
-         #:server-name (or/c #f non-empty-string?)
-         #:environment (or/c #f non-empty-string?)
-         #:release (or/c #f non-empty-string?)
-         #:request (or/c #f request?)
-         #:tags (hash/c non-empty-string? string?)
-         #:user (or/c #f sentry-user?)
-         #:breadcrumbs (listof breadcrumb?)]
-        event?)]
-  [event-attach-breadcrumbs
-   (-> event? (listof breadcrumb?) event?)]
-  [event->jsexpr
-   (-> event? jsexpr?)]))
-
-(define level/c
-  (or/c 'fatal 'error 'warning 'info 'debug))
-
-(define maybe-non-empty-string/c
-  (or/c #f non-empty-string?))
+ (struct-out event)
+ make-event
+ event-attach-breadcrumbs
+ event->jsexpr)
 
 (struct event
   (e
@@ -159,16 +117,6 @@
              (values (string->symbol (bytes->string/utf-8 (header-field hdr)))
                      (bytes->string/utf-8 (header-value hdr))))})
 
-(define contexts
-  (delay/sync
-   {device {name (gethostname)}
-    os {raw_description (system-type 'machine)}
-    runtime {name (case (system-type 'vm)
-                    [(racket) "Racket BC"]
-                    [(chez-scheme) "Racket CS"]
-                    [else (format "Racket ~a" (system-type 'vm))])
-             version (version)}}))
-
 (define accessors
   {platform (λ (_) "other")
    level (compose1 symbol->string event-level)
@@ -185,12 +133,11 @@
    user (lambda (e)
           (define user (event-user e))
           (and user (sentry-user->jsexpr user)))
-   contexts (λ (_) (force contexts))
+   contexts (λ (_) (get-common-contexts))
    breadcrumbs (lambda (e)
                  (define crumbs (event-breadcrumbs e))
                  (and (not (null? crumbs))
                       (map breadcrumb->jsexpr crumbs)))})
-
 
 ;; Local variables:
 ;; racket-indent-sequence-depth: 1
