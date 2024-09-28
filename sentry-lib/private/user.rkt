@@ -1,7 +1,8 @@
 #lang racket/base
 
 (require racket/contract/base
-         racket/string)
+         racket/string
+         "hasheq-sugar.rkt")
 
 (provide
  sentry-user?
@@ -31,14 +32,18 @@
   (sentry-user id username email ip-address subscription))
 
 (define accessors
-  (hasheq 'id sentry-user-id
-          'username sentry-user-username
-          'email sentry-user-email
-          'ip_address sentry-user-ip-address
-          'subscription sentry-user-subscription))
+  {id sentry-user-id
+   username sentry-user-username
+   email sentry-user-email
+   ip_address sentry-user-ip-address
+   subscription sentry-user-subscription})
 
 (define (sentry-user->jsexpr u)
   (for*/hasheq ([(key accessor) (in-hash accessors)]
                 [value (in-value (accessor u))]
                 #:when value)
     (values key value)))
+
+;; Local variables:
+;; racket-indent-sequence-depth: 1
+;; End:
