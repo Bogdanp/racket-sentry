@@ -6,11 +6,12 @@
          "event.rkt"
          "hasheq-sugar.rkt"
          "random.rkt"
-         "span.rkt"
          "transaction.rkt")
 
 (provide
  envelope-payload)
+
+(define-logger sentry)
 
 (define ((envelope-payload e) hs)
   (define out (open-output-bytes))
@@ -25,7 +26,7 @@
       [(? transaction? t)
        (values
         "transaction"
-        (span-trace-id t)
+        (generate-random-id)
         (jsexpr->bytes
          (transaction->jsexpr t)))]))
   (write-json
@@ -40,9 +41,10 @@
   (write-char #\newline out)
   (write-bytes data out)
   (write-char #\newline out)
-  (values
-   (hash-set hs 'content-type #"application/x-sentry-envelope")
-   (get-output-bytes out)))
+  (define envelope-bs
+    (get-output-bytes out))
+  (log-sentry-debug "sending envelope: ~s" envelope-bs)
+  (values (hash-set hs 'content-type #"application/x-sentry-envelope") envelope-bs))
 
 ;; Local variables:
 ;; racket-indent-sequence-depth: 1
