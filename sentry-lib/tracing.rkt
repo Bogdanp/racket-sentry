@@ -57,7 +57,7 @@
                      [current-span t])
         (proc t)))
     (lambda ()
-      (set-span-end-timestamp! t (current-seconds*))
+      (transaction-finalize! t)
       (define c (current-sentry))
       (when c (capture (sentry-dispatcher c) t)))))
 
@@ -79,6 +79,6 @@
       (parameterize ([current-span s])
         (proc s)))
     (lambda ()
-      (set-span-end-timestamp! s (current-seconds*))
+      (span-finalize! s)
       (define t (current-transaction))
       (when t (add-transaction-span! t s)))))

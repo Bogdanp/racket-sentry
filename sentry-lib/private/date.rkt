@@ -7,6 +7,7 @@
  [gregor (moment->iso8601)])
 
 (provide
+ current-seconds*
  current-utc-date
  date->rfc3339
  ->rfc3339)
@@ -16,8 +17,11 @@
       (date->rfc3339 v)
       (moment->iso8601 v)))
 
+(define (current-seconds*)
+  (* (current-inexact-milliseconds) 0.001))
+
 (define (current-utc-date)
-  (seconds->date (* (current-inexact-milliseconds) 0.001) #f))
+  (seconds->date (current-seconds*) #f))
 
 (define (date->rfc3339 the-date)
   (match-define (date* second minute hour day month year _week-day _year-day _dst? 0 nanosecond "UTC")

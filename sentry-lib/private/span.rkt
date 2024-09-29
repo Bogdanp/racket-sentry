@@ -1,15 +1,16 @@
 #lang racket/base
 
-(require "hasheq-sugar.rkt"
+(require "date.rkt"
+         "hasheq-sugar.rkt"
          "random.rkt")
 
 (provide
  (struct-out span)
  make-span
+ span-finalize!
  span-set!
  span->jsexpr
- current-span
- current-seconds*)
+ current-span)
 
 (define current-span
   (make-parameter #f))
@@ -46,11 +47,11 @@
               (hash-copy data)
               (make-hasheq))))
 
+(define (span-finalize! s)
+  (set-span-end-timestamp! s (current-seconds*)))
+
 (define (span-set! s k v)
   (hash-set! (span-data s) k v))
-
-(define (current-seconds*)
-  (* (current-inexact-milliseconds) 0.0001))
 
 (define (span->jsexpr s)
   (for*/hasheq ([(key accessor) (in-hash accessors)]

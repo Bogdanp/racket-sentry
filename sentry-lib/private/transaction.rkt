@@ -2,10 +2,13 @@
 
 (require racket/hash
          racket/lazy-require
+         threading
          "context.rkt"
+         "date.rkt"
          "hasheq-sugar.rkt"
          "random.rkt"
-         "span.rkt")
+         "span.rkt"
+         "user.rkt")
 
 (lazy-require
  ["trace.rkt" (get-trace-context)])
@@ -15,10 +18,12 @@
  make-transaction
  current-transaction
  transaction->jsexpr
+ transaction-finalize!
  add-transaction-span!)
 
 (struct transaction span
   (name
+   [user #:mutable]
    source
    spans-mu
    [spans #:mutable]))
@@ -52,6 +57,7 @@
               (hash-copy data)
               (make-hasheq))
    #;name name
+   #;user #f
    #;source source
    #;spans-mu (make-semaphore 1)
    #;spans null))
@@ -60,6 +66,10 @@
   (call-with-semaphore (transaction-spans-mu t)
     (lambda ()
       (set-transaction-spans! t (cons s (transaction-spans t))))))
+
+(define (transaction-finalize! t)
+  (set-transaction-user! t (current-sentry-user))
+  (span-finalize! t))
 
 (define (transaction->jsexpr t)
   (for*/hasheq ([(key accessor) (in-hash accessors)]
@@ -77,7 +87,10 @@
               (hash-union
                (get-common-contexts)
                {trace (get-trace-context t)}))
-   spans (λ (t) (map span->jsexpr (transaction-spans t)))})
+   spans (λ (t) (map span->jsexpr (transaction-spans t)))
+   user (λ-and~>
+         transaction-user
+         sentry-user->jsexpr)})
 
 ;; Local variables:
 ;; racket-indent-sequence-depth: 1
