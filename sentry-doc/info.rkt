@@ -6,7 +6,9 @@
   '(("scribblings/sentry.scrbl" () ("Web Development"))))
 (define deps '("base"))
 (define build-deps
-  '("gregor-doc"
+  '("db-doc"
+    "db-lib"
+    "gregor-doc"
     "gregor-lib"
     "racket-doc"
     "scribble-lib"

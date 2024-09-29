@@ -6,7 +6,6 @@
 (define deps
   '("actor-lib"
     "base"
-    "db-lib"
     "http-easy-lib"
     "monocle-lib"
     "threading-lib"

@@ -1,6 +1,7 @@
 #lang scribble/manual
 
-@(require (for-label (only-in gregor moment? now/moment)
+@(require (for-label (only-in db connection?)
+                     (only-in gregor moment? now/moment)
                      json
                      racket
                      sentry
@@ -210,4 +211,11 @@ records information about a block of code.
                     [v jsexpr?]) void?]{
 
   Sets @racket[k] to @racket[v] within @racket[s]'s data payload.
+}
+
+@subsubsection{Database Queries}
+
+@defproc[(trace-connection [c connection?]) connection?]{
+  Wraps all queries performed by @racket[c] in a @racket['db.query]
+  @tech{span}, recording the executed statement.
 }

@@ -1,9 +1,11 @@
 #lang racket/base
 
-(require racket/async-channel
+(require (only-in db query-exec sqlite3-connect)
+         racket/async-channel
          rackunit
          sentry
          sentry/tracing
+         sentry/tracing/database
          web-server/http
          web-server/servlet-dispatch
          web-server/web-server
@@ -169,17 +171,11 @@
                   'url.path "/"
                   'url.scheme "http")
           (lambda (t)
-            (call-with-span
-             #:operation 'index
-             (lambda (_s)
-               (call-with-span
-                #:operation 'db.query
-                #:description "SELECT pg_sleep(1)"
-                (lambda (_s)
-                  (sleep 1)))))
-            (call-with-span
-             #:operation 'render
-             void)
+            (define conn
+              (trace-connection
+               (sqlite3-connect #:database 'memory)))
+            (query-exec conn "SELECT $1" 42)
+            (call-with-span #:operation 'view.render void)
             (span-set! t 'http.response.status_code 200))))
       (sentry-stop c)))))
 

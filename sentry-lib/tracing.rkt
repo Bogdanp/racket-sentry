@@ -26,6 +26,7 @@
    (->* [(-> span? any)]
         [#:operation symbol?
          #:description (or/c #f string?)
+         #:origin symbol?
          #:data (or/c #f (hash/c symbol? jsexpr?))]
         any)]
   [span-set! (-> span? symbol? jsexpr? void?)]
