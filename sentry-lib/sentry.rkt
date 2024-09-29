@@ -105,7 +105,9 @@
          (delay/sync (void))))))
 
 (module+ private
-  (provide capture sentry-dispatcher))
+  (provide
+   (struct-out sentry)
+   capture))
 
 
 ;; actor ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

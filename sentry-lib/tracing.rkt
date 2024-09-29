@@ -2,9 +2,10 @@
 
 (require json
          racket/contract/base
+         threading
          "private/span.rkt"
          "private/transaction.rkt"
-         "sentry.rkt"
+         (only-in "sentry.rkt" current-sentry)
          (submod "sentry.rkt" private))
 
 (provide
@@ -44,6 +45,8 @@
   (define t #f)
   (dynamic-wind
     (lambda ()
+      (define c
+        (current-sentry))
       (set! t (make-transaction
                #:data data
                #:source source
@@ -51,6 +54,8 @@
                #:parent-id parent-id
                #:operation operation
                #:description description
+               #:environment (and~> c sentry-environment)
+               #:release (and~> c sentry-release)
                name)))
     (lambda ()
       (parameterize ([current-transaction t]

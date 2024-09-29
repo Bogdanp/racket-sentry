@@ -24,6 +24,8 @@
 (struct transaction span
   (name
    [user #:mutable]
+   environment
+   release
    source
    spans-mu
    [spans #:mutable]))
@@ -37,7 +39,9 @@
                           #:trace-id [trace-id #f]
                           #:parent-id [parent-id #f]
                           #:operation [operation 'function]
-                          #:description [description #f])
+                          #:description [description #f]
+                          #:environment [environment #f]
+                          #:release [release #f])
   (define parent
     (current-transaction))
   (transaction
@@ -58,6 +62,8 @@
               (make-hasheq))
    #;name name
    #;user #f
+   #;environment environment
+   #;release release
    #;source source
    #;spans-mu (make-semaphore 1)
    #;spans null))
@@ -90,7 +96,9 @@
    spans (λ (t) (map span->jsexpr (transaction-spans t)))
    user (λ-and~>
          transaction-user
-         sentry-user->jsexpr)})
+         sentry-user->jsexpr)
+   environment transaction-environment
+   release transaction-release})
 
 ;; Local variables:
 ;; racket-indent-sequence-depth: 1
