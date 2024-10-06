@@ -161,23 +161,37 @@
     "call-with-transaction"
 
     (when test-dsn
-      (define c (make-sentry test-dsn))
-      (parameterize ([current-sentry c])
-        (call-with-transaction "GET /"
-          #:operation 'http.server
-          #:source 'url
-          #:data (hasheq
-                  'http.request.method "GET"
-                  'url.path "/"
-                  'url.scheme "http")
-          (lambda (t)
-            (define conn
-              (trace-connection
-               (sqlite3-connect #:database 'memory)))
-            (query-exec conn "SELECT $1" 42)
-            (call-with-span #:operation 'view.render void)
-            (span-set! t 'http.response.status_code 200))))
-      (sentry-stop c)))))
+      (test-case "nesting"
+        (define c (make-sentry test-dsn))
+        (parameterize ([current-sentry c])
+          (call-with-transaction "GET /"
+            #:operation 'http.server
+            #:source 'url
+            #:data (hasheq
+                    'http.request.method "GET"
+                    'url.path "/"
+                    'url.scheme "http")
+            (lambda (t)
+              (define conn
+                (trace-connection
+                 (sqlite3-connect #:database 'memory)))
+              (query-exec conn "SELECT $1" 42)
+              (call-with-span #:operation 'view.render void)
+              (span-set! t 'http.response.status_code 200))))
+        (sentry-stop c))
+
+      (test-case "error in txn"
+        (define c (make-sentry test-dsn))
+        (parameterize ([current-sentry c])
+          (call-with-transaction "GET /"
+            #:operation 'http.server
+            #:source 'url
+            (lambda (_)
+              (call-with-span
+               #:description "do-something"
+               (lambda (_)
+                 (sentry-capture-exception! (exn:fail "an error in txn" (current-continuation-marks))))))))
+        (sentry-stop c))))))
 
 (module+ test
   (require rackunit/text-ui)

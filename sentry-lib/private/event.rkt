@@ -2,6 +2,7 @@
 
 (require net/url
          racket/format
+         racket/hash
          web-server/http/request-structs
          "context.rkt"
          "date.rkt"
@@ -46,7 +47,8 @@
    request
    tags
    user
-   breadcrumbs)
+   breadcrumbs
+   trace-context)
   #:transparent)
 
 (define (make-event
@@ -60,7 +62,8 @@
          #:request [request #f]
          #:tags [tags (hash)]
          #:user [user (current-sentry-user)]
-         #:breadcrumbs [breadcrumbs null])
+         #:breadcrumbs [breadcrumbs null]
+         #:trace-context [trace-context #f])
   (event e
          level
          timestamp
@@ -71,7 +74,8 @@
          request
          tags
          user
-         breadcrumbs))
+         breadcrumbs
+         trace-context))
 
 (define (event-attach-breadcrumbs e crumbs)
   (struct-copy event e [breadcrumbs crumbs]))
@@ -133,7 +137,15 @@
    user (lambda (e)
           (define user (event-user e))
           (and user (sentry-user->jsexpr user)))
-   contexts (λ (_) (get-common-contexts))
+   contexts (λ (e)
+              (cond
+                [(event-trace-context e)
+                 => (lambda (trace-context)
+                      (hash-union
+                       (get-common-contexts)
+                       {trace trace-context}))]
+                [else
+                 (get-common-contexts)]))
    breadcrumbs (lambda (e)
                  (define crumbs (event-breadcrumbs e))
                  (and (not (null? crumbs))

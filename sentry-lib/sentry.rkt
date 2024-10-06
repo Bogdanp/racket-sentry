@@ -16,6 +16,9 @@
          "private/envelope.rkt"
          "private/event.rkt"
          "private/reflect.rkt"
+         "private/span.rkt"
+         "private/trace.rkt"
+         "private/transaction.rkt"
          "private/user.rkt")
 
 (provide
@@ -100,8 +103,22 @@
           (let ([e (keyword-apply make-event kws kw-args (cons err args))])
             (struct-copy
              event e
-             [environment (or (event-environment e) (sentry-environment s))]
-             [release (or (event-release e) (sentry-release s))])))
+             [environment
+              (or
+               (event-environment e)
+               (sentry-environment s))]
+             [release
+              (or
+               (event-release e)
+               (sentry-release s))]
+             [trace-context
+              (or
+               (and~>
+                (current-span)
+                (get-trace-context))
+               (and~>
+                (current-transaction)
+                (get-trace-context)))])))
          (delay/sync (void))))))
 
 (module+ private
