@@ -34,8 +34,10 @@ needs to run and you can start sending exceptions by calling
 @racketblock[
 (require sentry)
 
-(parameterize ([current-sentry (make-sentry "https://key@sentry.io/12")])
+(define client (make-sentry "https://key@sentry.io/12"))
+(parameterize ([current-sentry client])
   (sentry-capture-exception! (make-exn:fail "an error" (current-continuation-marks))))
+(sentry-stop client)
 ]
 
 @section[#:tag "reference"]{Reference}
