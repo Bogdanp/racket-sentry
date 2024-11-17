@@ -44,6 +44,13 @@ needs to run and you can start sending exceptions by calling
 @defmodule[sentry]
 @subsection{Core API}
 
+@defproc[(event? [v any/c]) boolean?]{
+  Returns @racket[#t] when @racket[v] is an event captured by
+  @racket[sentry-capture-exception!].
+
+  @history[#:added "0.5"]
+}
+
 @defproc[(sentry? [v any/c]) boolean?]{
   Returns @racket[#t] when @racket[v] is a Sentry client.
 }
@@ -54,9 +61,13 @@ needs to run and you can start sending exceptions by calling
 }
 
 @defproc[(make-sentry [dsn string?]
+                      [#:sampler sampler (-> (or/c event? transaction?) (real-in 0.0 1.0)) (lambda (_) 1.0)]
                       [#:backlog backlog exact-positive-integer? 128]
                       [#:release release (or/c #f non-empty-string?) (getenv "SENTRY_RELEASE")]
-                      [#:environment environment (or/c #f non-empty-string?) (getenv "SENTRY_ENVIRONMENT")])
+                      [#:environment environment (or/c #f non-empty-string?) (getenv "SENTRY_ENVIRONMENT")]
+                      [#:connect-timeout-ms connect-timeout exact-positive-integer? 5000]
+                      [#:send-timeout-ms send-timeout exact-positive-integer? 5000]
+                      [#:max-breadcrumbs max-breadcrumbs exact-positive-integer? 50])
                       sentry?]{
   Returns a Sentry client.
 
@@ -67,6 +78,12 @@ needs to run and you can start sending exceptions by calling
   with the given value. Ditto for the @racket[#:environment] argument.
 
   The reutrned client logs messages to the @racket['sentry] topic.
+
+  The @racket[#:sampler] argument determines what chance an event has to
+  be sent to the server. The default implementation samples 100% of all
+  events.
+
+  @history[#:changed "0.5" @elem{Added the @racket[#:sampler] argument.}]
 }
 
 @defproc[(sentry-capture-exception! [e exn?]

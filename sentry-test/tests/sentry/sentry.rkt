@@ -191,7 +191,46 @@
                #:description "do-something"
                (lambda (_)
                  (sentry-capture-exception! (exn:fail "an error in txn" (current-continuation-marks))))))))
-        (sentry-stop c))))))
+        (sentry-stop c))))
+
+   (let ([stop #f]
+         [events null])
+     (test-suite
+      "sampling"
+
+      #:before
+      (lambda ()
+        (set! stop (make-server
+                    (lambda (req)
+                      (set! events (cons (request-post-data/raw req) events))
+                      (response/empty)))))
+
+      #:after
+      (lambda ()
+        (stop))
+
+      (test-case "can sample events"
+        (define (sample-rate e)
+          (cond
+            [(and (transaction? e)
+                  (equal? (transaction-name e) "GET /_health"))
+             0.0]
+            [else 1.0]))
+
+        (parameterize ([current-sentry
+                        (make-sentry
+                         #:sampler sample-rate
+                         "http://test@127.0.0.1:9095/test")])
+          (call-with-transaction "GET /"
+            #:operation 'http.server
+            #:source 'url
+            void)
+          (call-with-transaction "GET /_health"
+            #:operation 'http.server
+            #:source 'url
+            void)
+          (sentry-stop)
+          (check-equal? (length events) 1)))))))
 
 (module+ test
   (require rackunit/text-ui)

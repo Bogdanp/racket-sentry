@@ -11,6 +11,7 @@
 (provide
  (contract-out
   [transaction? (-> any/c boolean?)]
+  [transaction-name (-> transaction? string?)]
   [current-transaction (parameter/c transaction?)]
   [call-with-transaction
    (->* [string? (-> transaction? any)]
@@ -32,7 +33,9 @@
         any)]
   [span-set! (-> span? symbol? jsexpr? void?)]
   [rename span-id get-span-id (-> span? string?)]
-  [rename span-trace-id get-trace-id (-> span? string?)]))
+  [rename span-trace-id get-trace-id (-> span? string?)]
+  [rename span-operation get-span-operation (-> span? symbol?)]
+  [rename span-data get-span-data (-> span? (or/c #f (hash/c symbol? jsexpr?)))]))
 
 (define (call-with-transaction
           #:data [data #f]

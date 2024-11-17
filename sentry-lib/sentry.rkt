@@ -27,7 +27,8 @@
    (parameter/c (or/c #f sentry?))]
   [make-sentry
    (->* [string?]
-        [#:backlog exact-positive-integer?
+        [#:sampler (-> (or/c event? transaction?) (real-in 0.0 1.0))
+         #:backlog exact-positive-integer?
          #:release (or/c #f non-empty-string?)
          #:environment (or/c #f non-empty-string?)
          #:connect-timeout-ms exact-positive-integer?
@@ -50,7 +51,8 @@
          #:breadcrumbs(listof breadcrumb?)]
         (evt/c void?))]
   [sentry-stop
-   (->* [] [sentry?] void?)]))
+   (->* [] [sentry?] void?)]
+  [event? (-> any/c boolean?)]))
 
 (define-logger sentry)
 
@@ -61,6 +63,7 @@
   (make-parameter #f))
 
 (define (make-sentry dsn:str
+                     #:sampler [sample-rate (λ (_) 1.0)]
                      #:backlog [backlog 128]
                      #:release [release (getenv "SENTRY_RELEASE")]
                      #:environment [environment (getenv "SENTRY_ENVIRONMENT")]
@@ -86,7 +89,7 @@
         (make-timeout-config
          #:connect (/ connect-timeout 1000)
          #:request (/ send-timeout 1000)))
-      (dispatch-actor sess heads endpoint backlog timeouts max-breadcrumbs recv)))
+      (dispatch-actor sess heads endpoint backlog timeouts max-breadcrumbs recv sample-rate)))
   (sentry release environment custodian dispatcher))
 
 (define (sentry-stop [s (current-sentry)])
@@ -129,7 +132,7 @@
 
 ;; actor ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define-actor (dispatch-actor sess heads endpoint backlog timeouts max-breadcrumbs log-receiver)
+(define-actor (dispatch-actor sess heads endpoint backlog timeouts max-breadcrumbs log-receiver sample-rate)
   #:state (make-state)
   #:event
   (lambda (st)
@@ -171,6 +174,10 @@
 
       [(>= (length (state-pending st)) backlog)
        (log-sentry-warning "dropping event: queue full")
+       (values st (delay/sync (void)))]
+
+      [(>= (random) (sample-rate e))
+       (log-sentry-warning "dropping event: not sampled")
        (values st (delay/sync (void)))]
 
       [else
