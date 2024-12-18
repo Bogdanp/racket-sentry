@@ -1,14 +1,14 @@
 #lang racket/base
 
 (require (for-syntax racket/base)
+         racket/class
+         racket/contract/base
+         sentry/tracing
          (only-in db/private/generic/interfaces
                   connection<%>
                   connection?
                   statement-binding?
-                  statement-binding-pst)
-         racket/class
-         racket/contract/base
-         sentry/tracing)
+                  statement-binding-pst))
 
 (provide
  traced-connection%
