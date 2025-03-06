@@ -186,7 +186,9 @@
                       (event-attach-breadcrumbs e (state-breadcrumbs st))
                       e)])
            (delay/thread
-            (post
+            (session-request
+             #;session sess
+             #:method 'post
              #:data (gzip-payload (envelope-payload e))
              #:headers heads
              #:timeouts timeouts
