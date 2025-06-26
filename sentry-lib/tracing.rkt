@@ -12,7 +12,7 @@
  (contract-out
   [transaction? (-> any/c boolean?)]
   [transaction-name (-> transaction? string?)]
-  [current-transaction (parameter/c transaction?)]
+  [current-transaction (parameter/c (or/c #f transaction?))]
   [call-with-transaction
    (->* [string? (-> transaction? any)]
         [#:data (or/c #f (hash/c symbol? jsexpr?))
@@ -23,7 +23,7 @@
          #:description (or/c #f string?)]
         any)]
   [span? (-> any/c boolean?)]
-  [current-span (parameter/c span?)]
+  [current-span (parameter/c (or/c #f span?))]
   [call-with-span
    (->* [(-> span? any)]
         [#:operation symbol?
