@@ -142,15 +142,21 @@
       log-receiver
       (match-lambda
         [(vector level message value topic)
-         (define crumb
-           (make-breadcrumb
-            #:category 'log
-            #:message message
-            #:level level
-            #:data (hasheq
-                    'topic (~a topic)
-                    'value (~s value))))
-         (state-add-breadcrumb st crumb max-breadcrumbs)]))
+         (case topic
+           ;; XXX: Avoid adding Sentry's own log messages as
+           ;; breadcrumbs since they will dominate under high
+           ;; transaction volume.
+           [(sentry) st]
+           [else
+            (define crumb
+              (make-breadcrumb
+               #:category 'log
+               #:message message
+               #:level level
+               #:data (hasheq
+                       'topic (~a topic)
+                       'value (~s value))))
+            (state-add-breadcrumb st crumb max-breadcrumbs)])]))
      (for/list ([promise (in-list (state-pending st))])
        (wrap-evt promise (λ (_) (state-handle-response st promise))))))
   #:stopped?
