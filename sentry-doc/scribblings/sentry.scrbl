@@ -153,15 +153,18 @@ records information about a block of code.
 @(define annot-url "https://develop.sentry.dev/sdk/event-payloads/transaction/#transaction-annotations")
 @(define traces-url "https://develop.sentry.dev/sdk/telemetry/traces/")
 @(define span-ops-url "https://develop.sentry.dev/sdk/telemetry/traces/span-operations/")
+@(define request-iface-url "https://develop.sentry.dev/sdk/data-model/event-payloads/request/")
 
 @defproc[(call-with-transaction [name string?]
                                 [proc (-> transaction? any)]
                                 [#:data data (or/c #f (hash/c symbol? jsexpr?)) #f]
+                                [#:origin origin symbol? 'manual]
                                 [#:source source symbol? 'custom]
                                 [#:trace-id trace-id (or/c #f string?) #f]
                                 [#:parent-id parent-id (or/c #f string?) #f]
                                 [#:operation operation symbol? 'function]
-                                [#:description description (or/c #f string?) #f]) any]{
+                                [#:description description (or/c #f string?) #f]
+                                [#:request request (or/c #f jsexpr?) #f]) any]{
 
   Calls @racket[proc] in the context of a @tech{transaction} with the
   given name. When the call to @racket[proc] finishes executing, the
@@ -187,6 +190,13 @@ records information about a block of code.
 
   The @racket[#:description] may be an arbitrary string describing the
   transaction in detail.
+
+  The @racket[#:request] may be a @racket[jsexpr?] conforming to the
+  @hyperlink[request-iface-url]{request interface}.
+
+  @history[
+   #:changed "0.6" @elem{Added the @racket[#:origin] and @racket[#:request] arguments.}
+  ]
 }
 
 @defproc[(span? [v any/c]) boolean?]{
