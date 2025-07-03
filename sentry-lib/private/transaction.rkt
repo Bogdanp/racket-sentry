@@ -35,7 +35,7 @@
 
 (define (make-transaction name
                           #:data [data #f]
-                          #:source [source 'manual]
+                          #:source [source 'custom]
                           #:trace-id [trace-id #f]
                           #:parent-id [parent-id #f]
                           #:operation [operation 'function]
