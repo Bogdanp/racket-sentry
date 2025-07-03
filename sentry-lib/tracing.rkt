@@ -16,11 +16,13 @@
   [call-with-transaction
    (->* [string? (-> transaction? any)]
         [#:data (or/c #f (hash/c symbol? jsexpr?))
+         #:origin symbol?
          #:source symbol?
          #:trace-id (or/c #f string?)
          #:parent-id (or/c #f string?)
          #:operation symbol?
-         #:description (or/c #f string?)]
+         #:description (or/c #f string?)
+         #:request (or/c #f jsexpr?)]
         any)]
   [span? (-> any/c boolean?)]
   [current-span (parameter/c (or/c #f span?))]
@@ -39,11 +41,13 @@
 
 (define (call-with-transaction
           #:data [data #f]
+          #:origin [origin 'manual]
           #:source [source 'custom]
           #:trace-id [trace-id #f]
           #:parent-id [parent-id #f]
           #:operation [operation 'function]
           #:description [description #f]
+          #:request [request #f]
           name proc)
   (define t #f)
   (dynamic-wind
@@ -52,6 +56,7 @@
         (current-sentry))
       (set! t (make-transaction
                #:data data
+               #:origin origin
                #:source source
                #:trace-id trace-id
                #:parent-id parent-id
@@ -59,6 +64,7 @@
                #:description description
                #:environment (and~> c sentry-environment)
                #:release (and~> c sentry-release)
+               #:request request
                name)))
     (lambda ()
       (parameterize ([current-transaction t]

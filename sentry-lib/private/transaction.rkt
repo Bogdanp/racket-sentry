@@ -26,6 +26,7 @@
    [user #:mutable]
    environment
    release
+   request
    source
    spans-mu
    [spans #:mutable]))
@@ -35,13 +36,15 @@
 
 (define (make-transaction name
                           #:data [data #f]
+                          #:origin [origin 'manual]
                           #:source [source 'custom]
                           #:trace-id [trace-id #f]
                           #:parent-id [parent-id #f]
                           #:operation [operation 'function]
                           #:description [description #f]
                           #:environment [environment #f]
-                          #:release [release #f])
+                          #:release [release #f]
+                          #:request [request #f])
   (define parent
     (current-transaction))
   (transaction
@@ -56,7 +59,7 @@
    #;start-timestamp (current-seconds*)
    #;end-timestamp #f
    #;status 'ok
-   #;origin #f
+   #;origin origin
    #;data (if data
               (hash-copy data)
               (make-hasheq))
@@ -64,6 +67,7 @@
    #;user #f
    #;environment environment
    #;release release
+   #;request request
    #;source source
    #;spans-mu (make-semaphore 1)
    #;spans null))
@@ -98,7 +102,8 @@
          transaction-user
          sentry-user->jsexpr)
    environment transaction-environment
-   release transaction-release})
+   release transaction-release
+   request transaction-request})
 
 ;; Local variables:
 ;; racket-indent-sequence-depth: 1

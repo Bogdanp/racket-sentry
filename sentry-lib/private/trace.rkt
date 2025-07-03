@@ -20,6 +20,7 @@
    span_id span-id
    parent_span_id span-parent-id
    status (compose1 symbol->string span-status)
+   origin (compose1 symbol->string span-origin)
    data span-data})
 
 ;; Local variables:
