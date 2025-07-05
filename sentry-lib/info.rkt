@@ -6,6 +6,7 @@
 (define deps
   '("actor-lib"
     "base"
+    ["box-extra-lib" #:version "1.0.1"]
     "http-easy-lib"
     "monocle-lib"
     "threading-lib"

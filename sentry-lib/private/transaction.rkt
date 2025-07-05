@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require racket/hash
+(require box-extra
+         racket/hash
          racket/lazy-require
          threading
          "context.rkt"
@@ -28,8 +29,8 @@
    release
    request
    source
-   spans-mu
-   [spans #:mutable]))
+   spans-box
+   update-spans-box))
 
 (define current-transaction
   (make-parameter #f))
@@ -47,6 +48,8 @@
                           #:request [request #f])
   (define parent
     (current-transaction))
+  (define spans-box
+    (box null))
   (transaction
    #;id (generate-random-id 8)
    #;trace-id (cond
@@ -69,13 +72,14 @@
    #;release release
    #;request request
    #;source source
-   #;spans-mu (make-semaphore 1)
-   #;spans null))
+   #;spans-box spans-box
+   #;update-spans-box (make-box-update-proc spans-box)))
 
 (define (add-transaction-span! t s)
-  (call-with-semaphore (transaction-spans-mu t)
-    (lambda ()
-      (set-transaction-spans! t (cons s (transaction-spans t))))))
+  ((transaction-update-spans-box t)
+   (lambda (spans)
+     (cons s spans)))
+  (void))
 
 (define (transaction-finalize! t)
   (set-transaction-user! t (current-sentry-user))
@@ -97,7 +101,7 @@
               (hash-union
                (get-common-contexts)
                {trace (get-trace-context t)}))
-   spans (λ (t) (map span->jsexpr (transaction-spans t)))
+   spans (λ (t) (map span->jsexpr (unbox (transaction-spans-box t))))
    user (λ-and~>
          transaction-user
          sentry-user->jsexpr)
