@@ -22,11 +22,8 @@
 
 (define traced-connection%
   (class* object% (connection<%>)
-    (init-field base)
+    (init-field conn)
     (super-new)
-
-    (define/public (get-base)
-      base)
 
     (define/public (query fsym stmt cursor?)
       (define the-stmt
@@ -38,15 +35,16 @@
        #:operation 'db.query
        #:description (format "~a" the-stmt)
        (lambda (_)
-         (send base query fsym stmt cursor?))))
+         (send conn query fsym stmt cursor?))))
 
     (proxy
-     base
+     conn
      [connected?]
      [disconnect]
      [get-dbsystem]
      [prepare fsym stmt close-on-exec?]
      [fetch/cursor fsym cursor fetch-size]
+     [get-base]
      [list-tables fsym schema]
      [start-transaction fsym isolation option cwt?]
      [end-transaction fsym mode cwt?]
@@ -54,4 +52,4 @@
      [free-statement pst need-lock?])))
 
 (define (trace-connection conn)
-  (new traced-connection% [base conn]))
+  (new traced-connection% [conn conn]))
