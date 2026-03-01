@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require rackunit
+         "cron.rkt"
          "event.rkt"
          "sentry.rkt"
          "user.rkt")
@@ -11,7 +12,8 @@
 
    event-tests
    sentry-tests
-   user-tests))
+   user-tests
+   cron-tests))
 
 (module+ main
   (require rackunit/text-ui)

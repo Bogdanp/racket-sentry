@@ -5,6 +5,7 @@
                      json
                      racket
                      sentry
+                     sentry/cron
                      sentry/tracing
                      web-server/http/request-structs))
 
@@ -247,4 +248,43 @@ records information about a block of code.
 @defproc[(trace-connection [c connection?]) connection?]{
   Wraps all queries performed by @racket[c] in a @racket['db.query]
   @tech{span}, recording the executed statement.
+}
+
+
+@subsection{Cron Monitoring}
+@defmodule[sentry/cron]
+
+A @deftech{cron monitor} tracks the execution and health of a cron job.
+
+@defproc[(call-with-monitor
+          [#:config config (or/c #f monitor-config?) #f]
+          [slug non-empty-string?]
+          [proc (-> any)])
+         any]{
+
+  Calls @racket[proc] within a monitored context. Sends an
+  @racket['in-progress] check-in before calling @racket[proc], then
+  sends @racket['ok] with the elapsed duration on normal return, or
+  @racket['error] with the elapsed duration if @racket[proc] raises an
+  exception. The exception is re-raised after the error check-in is
+  sent.
+
+  If a @racket[#:config] is provided, it is sent with the initial
+  @racket['in-progress] check-in. A @racket[#:config] is necessary in
+  order to upsert a cron monitor into Sentry.
+
+  @history[#:added "0.7"]
+}
+
+@defstruct[monitor-config ([schedule schedule?])]{
+  A struct that represents a @tech{cron monitor}'s configuration.
+
+  @history[#:added "0.7"]
+}
+
+@defstruct[schedule ([type (or/c 'crontab 'interval)]
+                     [value string?])]{
+  A struct that represents a @tech{cron monitor}'s schedule.
+
+  @history[#:added "0.7"]
 }

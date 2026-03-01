@@ -2,6 +2,7 @@
 
 (require json
          racket/match
+         "check-in.rkt"
          "date.rkt"
          "event.rkt"
          "hasheq-sugar.rkt"
@@ -17,6 +18,12 @@
   (define out (open-output-bytes))
   (define-values (type id data)
     (match e
+      [(? check-in? ci)
+       (values
+        "check_in"
+        (generate-random-id)
+        (jsexpr->bytes
+         (check-in->jsexpr ci)))]
       [(? event? e)
        (values
         "event"

@@ -281,7 +281,7 @@
        (~> (state-rate-limit st deadline)
            (state-remove-pending promise))]
 
-      [(response #:status-code 200)
+      [(response #:status-code (or 200 204))
        (log-sentry-debug "event captured successfully")
        (state-remove-pending st promise)]
 
