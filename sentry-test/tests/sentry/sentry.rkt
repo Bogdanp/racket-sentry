@@ -1,26 +1,15 @@
 #lang racket/base
 
 (require (only-in db query-exec sqlite3-connect)
-         racket/async-channel
          rackunit
          sentry
          sentry/tracing
          sentry/tracing/database
          web-server/http
-         web-server/servlet-dispatch
-         web-server/web-server
          "common.rkt")
 
 (provide
  sentry-tests)
-
-(define (make-server start)
-  (define ch (make-async-channel))
-  (begin0 (serve
-           #:confirmation-channel ch
-           #:port 9095
-           #:dispatch (dispatch/servlet start))
-    (sync ch)))
 
 (define (box-update! b f)
   (define v (unbox b))

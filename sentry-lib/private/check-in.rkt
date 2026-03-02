@@ -3,7 +3,9 @@
 (require buid
          racket/match
          threading
-         "hasheq-sugar.rkt")
+         "hasheq-sugar.rkt"
+         "trace.rkt"
+         "transaction.rkt")
 
 (provide
  (struct-out check-in)
@@ -12,7 +14,7 @@
  make-check-in
  check-in->jsexpr)
 
-(struct check-in (id monitor-slug status duration environment release monitor-config contexts)
+(struct check-in (id monitor-slug status duration environment release monitor-config transaction)
   #:transparent)
 (struct monitor-config (schedule)
   #:transparent)
@@ -25,7 +27,7 @@
          #:duration [duration #f]
          #:environment [environment #f]
          #:release [release #f]
-         #:contexts [contexts #f]
+         #:transaction [txn (current-transaction)]
          slug [config #f])
   (check-in
    #;id id
@@ -35,7 +37,7 @@
    #;environment environment
    #;release release
    #;monitor-config config
-   #;contexts contexts))
+   #;transaction txn))
 
 (define (~check-in-status status)
   (case status
@@ -65,7 +67,9 @@
    duration check-in-duration
    monitor_slug check-in-monitor-slug
    monitor_config (lambda-and~> check-in-monitor-config monitor-config->jsexpr)
-   contexts check-in-contexts})
+   contexts (lambda (c)
+              (define t (check-in-transaction c))
+              (if t {trace (get-trace-context t)} {}))})
 
 ;; Local variables:
 ;; racket-indent-sequence-depth: 1
