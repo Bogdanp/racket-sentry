@@ -6,10 +6,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
-      - uses: Bogdanp/setup-racket@v1.11
+      - uses: Bogdanp/setup-racket@v1.14
         with:
           architecture: x64
-          version: '8.9'
+          version: '9.1'
       - run: raco pkg install --batch --auto sentry-lib/ sentry-doc/ sentry-test/ sentry/
       - run: raco test sentry-test/
         env:
