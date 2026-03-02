@@ -62,7 +62,7 @@ needs to run and you can start sending exceptions by calling
 }
 
 @defproc[(make-sentry [dsn string?]
-                      [#:sampler sampler (-> (or/c event? transaction?) (real-in 0.0 1.0)) (lambda (_) 1.0)]
+                      [#:sampler sampler (-> (or/c check-in? event? transaction?) (real-in 0.0 1.0)) (lambda (_) 1.0)]
                       [#:backlog backlog exact-positive-integer? 128]
                       [#:release release (or/c #f non-empty-string?) (getenv "SENTRY_RELEASE")]
                       [#:environment environment (or/c #f non-empty-string?) (getenv "SENTRY_ENVIRONMENT")]

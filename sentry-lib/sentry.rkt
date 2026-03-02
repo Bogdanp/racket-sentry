@@ -12,6 +12,7 @@
          racket/string
          threading
          web-server/http/request-structs
+         "private/check-in.rkt"
          "private/dsn.rkt"
          "private/envelope.rkt"
          "private/event.rkt"
@@ -27,7 +28,7 @@
    (parameter/c (or/c #f sentry?))]
   [make-sentry
    (->* [string?]
-        [#:sampler (-> (or/c event? transaction?) (real-in 0.0 1.0))
+        [#:sampler (-> (or/c check-in? event? transaction?) (real-in 0.0 1.0))
          #:backlog exact-positive-integer?
          #:release (or/c #f non-empty-string?)
          #:environment (or/c #f non-empty-string?)
