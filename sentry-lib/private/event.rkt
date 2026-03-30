@@ -13,8 +13,8 @@
 ;; breadcrumb ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (provide
- make-breadcrumb
- breadcrumb?)
+ (struct-out breadcrumb)
+ make-breadcrumb)
 
 (struct breadcrumb (timestamp category level message data)
   #:transparent)

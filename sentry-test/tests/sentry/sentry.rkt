@@ -199,10 +199,14 @@
         (stop))
 
       (test-case "can sample events"
+        (struct exn:fail:client:internal-error exn:fail ())
+
         (define (sample-rate e)
           (cond
-            [(and (transaction? e)
-                  (equal? (transaction-name e) "GET /_health"))
+            [(and
+              (event? e)
+              (exn:fail:client:internal-error?
+               (event-e e)))
              0.0]
             [else 1.0]))
 
@@ -210,6 +214,32 @@
                         (make-sentry
                          #:sampler sample-rate
                          "http://test@127.0.0.1:9095/test")])
+          (set! events null)
+          (sentry-capture-exception!
+           (with-handlers ([exn:fail? values])
+             (error 'example "something failed")))
+          (sentry-capture-exception!
+           (exn:fail:client:internal-error
+            "an internal error occurred"
+            (current-continuation-marks)))
+          (sentry-stop)
+          (check-equal? (length events) 1)))
+
+      (test-case "can sample transactions"
+        (define (sample-rate e) ;; noqa
+          (cond
+            [(and (transaction? e)
+                  (equal?
+                   (transaction-name e)
+                   "GET /_health"))
+             0.0]
+            [else 1.0]))
+
+        (parameterize ([current-sentry
+                        (make-sentry
+                         #:sampler sample-rate
+                         "http://test@127.0.0.1:9095/test")])
+          (set! events null)
           (call-with-transaction "GET /"
             #:operation 'http.server
             #:source 'url

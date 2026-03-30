@@ -2,6 +2,7 @@
 
 (require actor
          data/monocle
+         json
          net/http-easy
          net/url
          racket/contract/base
@@ -24,6 +25,25 @@
 
 (provide
  (contract-out
+  [struct breadcrumb
+    ([timestamp date?]
+     [category symbol?]
+     [level symbol?]
+     [message string?]
+     [data jsexpr?])]
+  [struct event
+    ([e exn?]
+     [level (or/c 'fatal 'error 'warning 'info 'debug)]
+     [timestamp date?]
+     [transaction (or/c #f non-empty-string?)]
+     [server-name (or/c #f non-empty-string?)]
+     [environment (or/c #f non-empty-string?)]
+     [release (or/c #f non-empty-string?)]
+     [request (or/c #f request?)]
+     [tags (hash/c non-empty-string? string?)]
+     [user (or/c #f sentry-user?)]
+     [breadcrumbs (listof breadcrumb?)]
+     [trace-context (or/c #f jsexpr?)])]
   [current-sentry
    (parameter/c (or/c #f sentry?))]
   [make-sentry
@@ -49,11 +69,10 @@
          #:request (or/c #f request?)
          #:tags (hash/c non-empty-string? string?)
          #:user (or/c #f sentry-user?)
-         #:breadcrumbs(listof breadcrumb?)]
+         #:breadcrumbs (listof breadcrumb?)]
         (evt/c void?))]
   [sentry-stop
-   (->* [] [sentry?] void?)]
-  [event? (-> any/c boolean?)]))
+   (->* [] [sentry?] void?)]))
 
 (define-logger sentry)
 

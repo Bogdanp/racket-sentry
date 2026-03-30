@@ -45,11 +45,38 @@ needs to run and you can start sending exceptions by calling
 @defmodule[sentry]
 @subsection{Core API}
 
-@defproc[(event? [v any/c]) boolean?]{
-  Returns @racket[#t] when @racket[v] is an event captured by
+@defstruct[
+ breadcrumb
+ ([timestamp date?]
+  [category symbol?]
+  [level symbol?]
+  [message string?]
+  [data jsexpr?])]{
+
+  A struct representing breadcrumb entries.
+
+  @history[#:added "0.8"]
+}
+
+@defstruct[
+ event
+ ([e exn?]
+  [level (or/c 'fatal 'error 'warning 'info 'debug)]
+  [timestamp date?]
+  [transaction (or/c #f non-empty-string?)]
+  [server-name (or/c #f non-empty-string?)]
+  [environment (or/c #f non-empty-string?)]
+  [release (or/c #f non-empty-string?)]
+  [request (or/c #f request?)]
+  [tags (hash/c non-empty-string? string?)]
+  [user (or/c #f sentry-user?)]
+  [breadcrumbs (listof breadcrumb?)]
+  [trace-context (or/c #f jsexpr?)])]{
+
+  A struct representing exceptions captured by
   @racket[sentry-capture-exception!].
 
-  @history[#:added "0.5"]
+  @history[#:added "0.8"]
 }
 
 @defproc[(sentry? [v any/c]) boolean?]{
